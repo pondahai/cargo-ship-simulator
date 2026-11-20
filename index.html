@@ -1,0 +1,2459 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>M.V. PACIFIC HORIZON — 3D 貨輪模擬器</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a1628; font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; color: #e8f1f8; }
+  #canvas-container { position: fixed; inset: 0; }
+
+  /* Start / Pause Overlay */
+  #overlay {
+    position: fixed; inset: 0; z-index: 30;
+    background: radial-gradient(circle at 50% 40%, rgba(12, 32, 58, 0.88), rgba(5, 12, 24, 0.96));
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    backdrop-filter: blur(6px); transition: opacity 0.35s ease;
+  }
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+  .title-card {
+    max-width: 760px; width: 92%; padding: 32px 38px;
+    background: rgba(13, 28, 48, 0.9);
+    border: 1px solid rgba(90, 175, 255, 0.35);
+    border-radius: 14px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.08);
+    text-align: center;
+  }
+  .badge {
+    display: inline-block; padding: 4px 12px; border-radius: 999px;
+    font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+    background: rgba(34, 150, 243, 0.2); border: 1px solid rgba(90, 175, 255, 0.45);
+    color: #7cc4ff; margin-bottom: 12px;
+  }
+  .title-card h1 { font-size: 32px; letter-spacing: 1.5px; margin-bottom: 6px; color: #ffffff; }
+  .title-card .subtitle { font-size: 14px; color: #9ab8d4; margin-bottom: 20px; }
+  .spec-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+    margin: 18px 0 22px; text-align: center;
+  }
+  .spec-item {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; padding: 10px 6px;
+  }
+  .spec-item .val { font-size: 16px; font-weight: 700; color: #56c2ff; }
+  .spec-item .lbl { font-size: 11px; color: #8da7c0; margin-top: 2px; }
+  .controls-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 18px;
+    text-align: left; font-size: 13px; color: #cfe2f3;
+    background: rgba(0,0,0,0.25); padding: 14px 18px; border-radius: 10px; margin-bottom: 22px;
+  }
+  .controls-grid div { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding: 4px 0; }
+  kbd {
+    background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.22);
+    border-radius: 4px; padding: 2px 7px; font-size: 11px; font-family: monospace; color: #fff;
+  }
+  .btn-start {
+    padding: 13px 40px; font-size: 16px; font-weight: 700; letter-spacing: 1px;
+    border: none; border-radius: 8px; cursor: pointer;
+    background: linear-gradient(135deg, #1d8cf8, #00b8d9); color: #fff;
+    box-shadow: 0 8px 24px rgba(29, 140, 248, 0.45);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .btn-start:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(29, 140, 248, 0.6); }
+
+  /* HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+  .hud-panel {
+    position: absolute; background: rgba(8, 19, 34, 0.72);
+    border: 1px solid rgba(100, 180, 255, 0.25); border-radius: 10px;
+    backdrop-filter: blur(6px); padding: 10px 14px;
+  }
+  #hud-location { top: 16px; left: 16px; min-width: 250px; }
+  .loc-deck { font-size: 11px; letter-spacing: 1.5px; color: #6ec1ff; text-transform: uppercase; }
+  .loc-room { font-size: 18px; font-weight: 700; color: #fff; margin-top: 2px; }
+  .loc-coords { font-size: 11px; color: #8faac4; margin-top: 4px; font-family: monospace; }
+
+  #hud-ship { top: 16px; right: 16px; text-align: right; min-width: 220px; }
+  .ship-name { font-size: 12px; font-weight: 700; color: #7cc4ff; letter-spacing: 1px; }
+  .ship-stats { font-size: 13px; margin-top: 4px; color: #dcebf7; font-family: monospace; }
+  .telegraph-badge {
+    display: inline-block; margin-top: 5px; padding: 2px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 700; background: rgba(0, 200, 120, 0.22);
+    border: 1px solid rgba(0, 230, 140, 0.45); color: #5dffb0;
+  }
+
+  #hud-keys {
+    bottom: 16px; left: 16px; font-size: 12px; color: #b8d2ea;
+    display: flex; flex-wrap: wrap; gap: 10px; max-width: 680px;
+  }
+  #hud-keys span { display: inline-flex; align-items: center; gap: 4px; }
+
+  #hud-teleport {
+    bottom: 16px; right: 16px; font-size: 11px; color: #9fc0dc;
+  }
+  #hud-teleport .tp-title { color: #6ec1ff; font-weight: 700; margin-bottom: 4px; letter-spacing: 1px; }
+
+  /* Crosshair & Interaction Prompt */
+  #crosshair {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 6px; height: 6px; border-radius: 50%;
+    background: rgba(255, 255, 255, 0.8); box-shadow: 0 0 6px rgba(0,0,0,0.8);
+    pointer-events: none; z-index: 12; transition: transform 0.15s, background 0.15s;
+  }
+  #crosshair.active { transform: translate(-50%, -50%) scale(1.8); background: #56c2ff; }
+  #interact-prompt {
+    position: fixed; top: calc(50% + 26px); left: 50%; transform: translateX(-50%);
+    background: rgba(8, 22, 40, 0.88); border: 1px solid rgba(86, 194, 255, 0.6);
+    padding: 6px 14px; border-radius: 6px; font-size: 13px; color: #fff;
+    pointer-events: none; z-index: 12; opacity: 0; transition: opacity 0.15s;
+  }
+  #interact-prompt.visible { opacity: 1; }
+
+  /* Toast notification */
+  #toast {
+    position: fixed; top: 82px; left: 50%; transform: translateX(-50%);
+    background: rgba(14, 34, 60, 0.92); border: 1px solid rgba(90, 190, 255, 0.5);
+    padding: 8px 18px; border-radius: 8px; font-size: 13px; color: #e8f6ff;
+    pointer-events: none; z-index: 25; opacity: 0; transition: opacity 0.25s;
+  }
+  #toast.show { opacity: 1; }
+
+  /* 2D General Arrangement Blueprint Map Modal */
+  #ga-map {
+    position: fixed; inset: 0; z-index: 20;
+    background: rgba(4, 12, 24, 0.84); backdrop-filter: blur(5px);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+  #ga-map.visible { opacity: 1; pointer-events: auto; }
+  .ga-box {
+    width: min(940px, 94vw); background: #07192e;
+    border: 2px solid #2c7be5; border-radius: 10px; padding: 16px 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+  }
+  .ga-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .ga-header h2 { font-size: 16px; letter-spacing: 1.5px; color: #7cc4ff; font-family: monospace; }
+  .ga-header span { font-size: 12px; color: #8ab4d8; }
+  #ga-canvas { width: 100%; height: 420px; display: block; background: #051324; border: 1px solid rgba(70,150,255,0.3); border-radius: 6px; }
+</style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+
+<!-- Start / Pause Screen -->
+<div id="overlay">
+  <div class="title-card">
+    <div class="badge">General Arrangement 3D Simulator</div>
+    <h1>M.V. PACIFIC HORIZON</h1>
+    <div class="subtitle">108m 支線貨櫃輪（Feeder Container Ship）— 依據真實貨輪總佈置圖（GA Plan）建構</div>
+    <div class="spec-grid">
+      <div class="spec-item"><div class="val">104 m</div><div class="lbl">船長 (LOA)</div></div>
+      <div class="spec-item"><div class="val">18.0 m</div><div class="lbl">船寬 (Beam)</div></div>
+      <div class="spec-item"><div class="val">6 層</div><div class="lbl">可自由通行甲板</div></div>
+      <div class="spec-item"><div class="val">~500 TEU</div><div class="lbl">貨櫃裝載級別</div></div>
+    </div>
+    <div class="controls-grid">
+      <div><span>移動 / 奔跑</span><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> + <kbd>Shift</kbd></span></div>
+      <div><span>視角 / 跳躍</span><span>滑鼠 + <kbd>Space</kbd></span></div>
+      <div><span>互動（門 / 車鐘 / 舵）</span><span><kbd>E</kbd></span></div>
+      <div><span>總佈置圖 (GA 藍圖)</span><span><kbd>M</kbd></span></div>
+      <div><span>手電筒 / 切換日夜</span><span><kbd>F</kbd> / <kbd>T</kbd></span></div>
+      <div><span>鳴笛（霧笛）</span><span><kbd>H</kbd></span></div>
+      <div><span>快速傳送艙室</span><span><kbd>1</kbd>–<kbd>6</kbd></span></div>
+      <div><span>暫停選單</span><span><kbd>ESC</kbd></span></div>
+    </div>
+    <button class="btn-start" id="btn-start">登船開始探索</button>
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="hud-panel" id="hud-location">
+    <div class="loc-deck" id="loc-deck">DECK C — NAVIGATION BRIDGE</div>
+    <div class="loc-room" id="loc-room">駕駛台 (Wheelhouse)</div>
+    <div class="loc-coords" id="loc-coords">X: 0.0m | Y: 10.0m | Z: 29.0m</div>
+  </div>
+
+  <div class="hud-panel" id="hud-ship">
+    <div class="ship-name">M.V. PACIFIC HORIZON (IMO 9482710)</div>
+    <div class="ship-stats" id="ship-stats">航速: 12.0 kn | 航向: 000° N</div>
+    <div class="telegraph-badge" id="telegraph-badge">車鐘: HALF AHEAD</div>
+  </div>
+
+  <div class="hud-panel" id="hud-keys">
+    <span><kbd>WASD</kbd> 移動</span>
+    <span><kbd>Shift</kbd> 奔跑</span>
+    <span><kbd>E</kbd> 互動</span>
+    <span><kbd>M</kbd> GA 設計圖</span>
+    <span><kbd>F</kbd> 手電筒</span>
+    <span><kbd>T</kbd> 日/暮/夜</span>
+    <span><kbd>H</kbd> 鳴笛</span>
+  </div>
+
+  <div class="hud-panel" id="hud-teleport">
+    <div class="tp-title">快速前往 (1-9)</div>
+    <div>1:駕駛台 | 2:羅經甲板 | 3:船員層</div>
+    <div>4:餐廳/廚房 | 5:主機艙 | 6:船首甲板</div>
+    <div>7:舵機艙 | 8:管路通道 | 9:船首側推/水手長室</div>
+  </div>
+</div>
+
+<div id="crosshair"></div>
+<div id="interact-prompt">按 [E] 互動</div>
+<div id="toast">提示訊息</div>
+
+<!-- 2D GA Blueprint Modal -->
+<div id="ga-map">
+  <div class="ga-box">
+    <div class="ga-header">
+      <h2>GENERAL ARRANGEMENT PLAN — M.V. PACIFIC HORIZON (LOA 104m × B 18m)</h2>
+      <span>按 [M] 關閉設計圖</span>
+    </div>
+    <canvas id="ga-canvas" width="900" height="420"></canvas>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.146.0/build/three.min.js"></script>
+<script>
+(() => {
+  'use strict';
+
+  // =========================================================================
+  // 1. RENDERER, SCENE, CAMERA & LIGHTING
+  // =========================================================================
+  const container = document.getElementById('canvas-container');
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  container.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x88b8e6);
+  scene.fog = new THREE.FogExp2(0x9bc4e8, 0.0028);
+
+  const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 1400);
+
+  // Sun & Ambient
+  const hemiLight = new THREE.HemisphereLight(0xbbe0ff, 0x2a4058, 0.72);
+  scene.add(hemiLight);
+
+  const sunLight = new THREE.DirectionalLight(0xfff5e4, 1.35);
+  sunLight.position.set(70, 95, -55);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.width = 2048;
+  sunLight.shadow.mapSize.height = 2048;
+  sunLight.shadow.camera.near = 10;
+  sunLight.shadow.camera.far = 260;
+  sunLight.shadow.camera.left = -75;
+  sunLight.shadow.camera.right = 75;
+  sunLight.shadow.camera.top = 75;
+  sunLight.shadow.camera.bottom = -75;
+  sunLight.shadow.bias = -0.0005;
+  scene.add(sunLight);
+
+  // Flashlight attached to camera
+  const flashlight = new THREE.SpotLight(0xfff6e0, 0, 32, Math.PI / 4.5, 0.45, 1.2);
+  flashlight.position.set(0, 0, 0);
+  flashlight.target.position.set(0, 0, -1);
+  camera.add(flashlight);
+  camera.add(flashlight.target);
+  scene.add(camera);
+
+  // =========================================================================
+  // 2. PROCEDURAL TEXTURES (No external assets needed)
+  // =========================================================================
+  function makeCanvasTexture(w, h, drawFn, repeatX = 1, repeatY = 1) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    drawFn(ctx, w, h);
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(repeatX, repeatY);
+    tex.encoding = THREE.sRGBEncoding;
+    return tex;
+  }
+
+  // Corrugated container texture generator
+  function makeContainerTexture(baseHex, labelText) {
+    return makeCanvasTexture(512, 256, (ctx, w, h) => {
+      ctx.fillStyle = baseHex;
+      ctx.fillRect(0, 0, w, h);
+      // Corrugation ribs
+      for (let x = 0; x < w; x += 12) {
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.fillRect(x, 12, 4, h - 24);
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.fillRect(x + 4, 12, 3, h - 24);
+      }
+      // Top & bottom rails
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
+      ctx.fillRect(0, 0, w, 14);
+      ctx.fillRect(0, h - 14, w, 14);
+      // Company label
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      ctx.font = 'bold 46px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(labelText, w * 0.48, h * 0.5);
+      // Serial code
+      ctx.font = 'bold 14px monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText('PHZU ' + Math.floor(100000 + Math.random() * 899999), w - 20, 36);
+    });
+  }
+
+  const texDeckGreen = makeCanvasTexture(256, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#2f5246';
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 1800; i++) {
+      ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.05)';
+      ctx.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.14)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, w - 2, h - 2);
+  }, 16, 48);
+
+  const texSteelGrate = makeCanvasTexture(128, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#333b42';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#505b66';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < w; i += 16) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, h); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(w, i); ctx.stroke();
+    }
+    ctx.fillStyle = '#6c7a88';
+    for (let x = 4; x < w; x += 16)
+      for (let y = 4; y < h; y += 16)
+        ctx.fillRect(x, y, 4, 2);
+  }, 14, 18);
+
+  const texInteriorFloor = makeCanvasTexture(128, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#c8c4b8';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(0,0,0,0.09)';
+    ctx.strokeRect(0, 0, w/2, h/2);
+    ctx.strokeRect(w/2, h/2, w/2, h/2);
+  }, 10, 12);
+
+  const texBridgeFloor = makeCanvasTexture(128, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#2d3742';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.strokeRect(0, 0, w, h);
+  }, 8, 8);
+
+  const texHullPlate = makeCanvasTexture(256, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#18304d';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+    ctx.lineWidth = 2;
+    for (let y = 0; y < h; y += 64) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+    for (let x = 0; x < w; x += 128) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    }
+  }, 12, 3);
+
+  // Dynamic Radar Canvas Texture
+  const radarCanvas = document.createElement('canvas');
+  radarCanvas.width = 256; radarCanvas.height = 256;
+  const radarCtx = radarCanvas.getContext('2d');
+  const radarTex = new THREE.CanvasTexture(radarCanvas);
+
+  function updateRadarTexture(t) {
+    const ctx = radarCtx;
+    ctx.fillStyle = '#03140c';
+    ctx.fillRect(0, 0, 256, 256);
+    ctx.strokeStyle = 'rgba(0, 220, 110, 0.35)';
+    ctx.lineWidth = 1;
+    [35, 70, 105].forEach(r => {
+      ctx.beginPath(); ctx.arc(128, 128, r, 0, Math.PI * 2); ctx.stroke();
+    });
+    ctx.beginPath(); ctx.moveTo(128, 12); ctx.lineTo(128, 244); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(12, 128); ctx.lineTo(244, 128); ctx.stroke();
+
+    const angle = (t * 1.4) % (Math.PI * 2);
+    const grad = ctx.createLinearGradient(128, 128, 128 + Math.cos(angle) * 110, 128 + Math.sin(angle) * 110);
+    grad.addColorStop(0, 'rgba(0, 255, 130, 0.1)');
+    grad.addColorStop(1, 'rgba(0, 255, 130, 0.85)');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(128, 128);
+    ctx.lineTo(128 + Math.cos(angle) * 112, 128 + Math.sin(angle) * 112);
+    ctx.stroke();
+
+    // Target blips
+    ctx.fillStyle = '#6dffb3';
+    [[165, 82], [90, 68], [188, 160]].forEach(([bx, by]) => {
+      ctx.beginPath(); ctx.arc(bx, by, 3, 0, Math.PI * 2); ctx.fill();
+    });
+    radarTex.needsUpdate = true;
+  }
+
+  // ECDIS Electronic Chart Texture
+  const ecdisTex = makeCanvasTexture(256, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#0d2b45';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#184b6b';
+    ctx.fillRect(0, 0, w, h * 0.65);
+    // Landmass
+    ctx.fillStyle = '#9e8c5b';
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(95, 0); ctx.lineTo(72, 65); ctx.lineTo(35, 110); ctx.lineTo(0, 130);
+    ctx.closePath(); ctx.fill();
+    // Route line
+    ctx.strokeStyle = '#ff4466'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.moveTo(135, 240); ctx.lineTo(135, 120); ctx.lineTo(175, 25); ctx.stroke();
+    ctx.setLineDash([]);
+    // Own ship marker
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(135, 135, 5, 0, Math.PI * 2); ctx.fill();
+  });
+
+  // =========================================================================
+  // 3. PHYSICS & COLLISION SYSTEM (Multi-Deck Floors, Ramps, Solid Walls, Doors)
+  // =========================================================================
+  const colliders = [];    // { minX, maxX, minY, maxY, minZ, maxZ, active: true }
+  const floors = [];       // { minX, maxX, minZ, maxZ, y }
+  const ramps = [];        // { minX, maxX, minZ, maxZ, axis: 'z'|'x', yStart, yEnd }
+  const interactables = []; // { mesh, label, action, maxDist }
+  const interiorLights = [];
+  const exteriorFloodLights = [];
+
+  function addCollider(minX, maxX, minY, maxY, minZ, maxZ) {
+    const c = { minX, maxX, minY, maxY, minZ, maxZ, active: true };
+    colliders.push(c);
+    return c;
+  }
+
+  function addFloor(minX, maxX, minZ, maxZ, y) {
+    floors.push({ minX, maxX, minZ, maxZ, y });
+  }
+
+  function addRamp(minX, maxX, minZ, maxZ, axis, yStart, yEnd) {
+    ramps.push({ minX, maxX, minZ, maxZ, axis, yStart, yEnd });
+  }
+
+  // Materials Library
+  const matHullDark = new THREE.MeshStandardMaterial({ map: texHullPlate, roughness: 0.65, metalness: 0.35 });
+  const matHullRed = new THREE.MeshStandardMaterial({ color: 0x8b2323, roughness: 0.7, metalness: 0.25 });
+  const matWhiteSteel = new THREE.MeshStandardMaterial({ color: 0xecf2f7, roughness: 0.45, metalness: 0.15 });
+  const matInteriorWall = new THREE.MeshStandardMaterial({ color: 0xe4e8ec, roughness: 0.6, metalness: 0.05 });
+  const matDeck = new THREE.MeshStandardMaterial({ map: texDeckGreen, roughness: 0.85, metalness: 0.1 });
+  const matDarkSteel = new THREE.MeshStandardMaterial({ color: 0x2d3741, roughness: 0.5, metalness: 0.6 });
+  const matSafetyYellow = new THREE.MeshStandardMaterial({ color: 0xf4b400, roughness: 0.4, metalness: 0.2 });
+  const matOrange = new THREE.MeshStandardMaterial({ color: 0xe65100, roughness: 0.35, metalness: 0.15 });
+  const matGlass = new THREE.MeshPhysicalMaterial({
+    color: 0x99d6ff, transparent: true, opacity: 0.32, roughness: 0.08, metalness: 0.1, side: THREE.DoubleSide
+  });
+  const matGrate = new THREE.MeshStandardMaterial({ map: texSteelGrate, roughness: 0.55, metalness: 0.7 });
+  const matInteriorFloor = new THREE.MeshStandardMaterial({ map: texInteriorFloor, roughness: 0.75 });
+  const matBridgeFloor = new THREE.MeshStandardMaterial({ map: texBridgeFloor, roughness: 0.7 });
+  const matWood = new THREE.MeshStandardMaterial({ color: 0x7c5333, roughness: 0.65 });
+  const matEngineGreen = new THREE.MeshStandardMaterial({ color: 0x2a6b48, roughness: 0.45, metalness: 0.55 });
+  const matPipeBlue = new THREE.MeshStandardMaterial({ color: 0x1e88e5, roughness: 0.4, metalness: 0.5 });
+  const matPipeRed = new THREE.MeshStandardMaterial({ color: 0xd32f2f, roughness: 0.4, metalness: 0.5 });
+  const matPipeYellow = new THREE.MeshStandardMaterial({ color: 0xfbc02d, roughness: 0.4, metalness: 0.5 });
+  const matHatchCover = new THREE.MeshStandardMaterial({ color: 0x5d3028, roughness: 0.75, metalness: 0.35 });
+
+  // Ship Root Group (allows subtle gentle ocean roll/pitch visual if desired)
+  const shipGroup = new THREE.Group();
+  scene.add(shipGroup);
+
+  // Helper to create box + optional collider + optional floor
+  function makeBox(w, h, d, x, y, z, mat, opts = {}) {
+    const geo = new THREE.BoxGeometry(w, h, d);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = opts.castShadow !== false;
+    mesh.receiveShadow = opts.receiveShadow !== false;
+    shipGroup.add(mesh);
+    if (opts.solid) {
+      addCollider(x - w/2, x + w/2, y - h/2, y + h/2, z - d/2, z + d/2);
+    }
+    if (opts.walkable) {
+      addFloor(x - w/2, x + w/2, z - d/2, z + d/2, y + h/2);
+    }
+    return mesh;
+  }
+
+  // Helper: Wall with optional doorway opening
+  function makeWallZ(x1, x2, yBottom, height, z, thickness, mat, doorX = null, doorW = 1.4, doorH = 2.2) {
+    const yMid = yBottom + height / 2;
+    if (doorX === null) {
+      makeBox(x2 - x1, height, thickness, (x1 + x2) / 2, yMid, z, mat, { solid: true });
+    } else {
+      const leftEnd = doorX - doorW / 2;
+      const rightStart = doorX + doorW / 2;
+      if (leftEnd > x1 + 0.05) {
+        makeBox(leftEnd - x1, height, thickness, (x1 + leftEnd) / 2, yMid, z, mat, { solid: true });
+      }
+      if (x2 > rightStart + 0.05) {
+        makeBox(x2 - rightStart, height, thickness, (rightStart + x2) / 2, yMid, z, mat, { solid: true });
+      }
+      const lintelH = height - doorH;
+      if (lintelH > 0.05) {
+        makeBox(doorW, lintelH, thickness, doorX, yBottom + doorH + lintelH / 2, z, mat, { solid: true });
+      }
+    }
+  }
+
+  function makeWallX(z1, z2, yBottom, height, x, thickness, mat, doorZ = null, doorW = 1.4, doorH = 2.2) {
+    const yMid = yBottom + height / 2;
+    if (doorZ === null) {
+      makeBox(thickness, height, z2 - z1, x, yMid, (z1 + z2) / 2, mat, { solid: true });
+    } else {
+      const aEnd = doorZ - doorW / 2;
+      const bStart = doorZ + doorW / 2;
+      if (aEnd > z1 + 0.05) {
+        makeBox(thickness, height, aEnd - z1, x, yMid, (z1 + aEnd) / 2, mat, { solid: true });
+      }
+      if (z2 > bStart + 0.05) {
+        makeBox(thickness, height, z2 - bStart, x, yMid, (bStart + z2) / 2, mat, { solid: true });
+      }
+      const lintelH = height - doorH;
+      if (lintelH > 0.05) {
+        makeBox(thickness, lintelH, doorW, x, yBottom + doorH + lintelH / 2, doorZ, mat, { solid: true });
+      }
+    }
+  }
+
+  // Interactive Door Builder
+  function makeDoor(x, yBottom, z, axis, width = 1.3, height = 2.15, label = '艙門', color = 0x5c7388) {
+    const pivot = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.45 });
+    const thick = 0.08;
+    let mesh, col;
+
+    if (axis === 'z') {
+      // Wall lies along X, door opens swinging around left hinge
+      pivot.position.set(x - width / 2, yBottom, z);
+      mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, thick), mat);
+      mesh.position.set(width / 2, height / 2, 0);
+      // Porthole window on door
+      const win = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.1, 14), matGlass);
+      win.rotation.x = Math.PI / 2;
+      win.position.set(width / 2, height * 0.68, 0);
+      pivot.add(mesh, win);
+      col = addCollider(x - width / 2, x + width / 2, yBottom, yBottom + height, z - 0.12, z + 0.12);
+    } else {
+      // Wall lies along Z
+      pivot.position.set(x, yBottom, z - width / 2);
+      mesh = new THREE.Mesh(new THREE.BoxGeometry(thick, height, width), mat);
+      mesh.position.set(0, height / 2, width / 2);
+      const win = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.1, 14), matGlass);
+      win.rotation.z = Math.PI / 2;
+      win.position.set(0, height * 0.68, width / 2);
+      pivot.add(mesh, win);
+      col = addCollider(x - 0.12, x + 0.12, yBottom, yBottom + height, z - width / 2, z + width / 2);
+    }
+    mesh.castShadow = true;
+    shipGroup.add(pivot);
+
+    const doorState = { open: false, targetAngle: 0, curAngle: 0, pivot, col };
+    animatedDoors.push(doorState);
+
+    interactables.push({
+      mesh,
+      getLabel: () => doorState.open ? `關閉 ${label}` : `開啟 ${label}`,
+      action: () => {
+        doorState.open = !doorState.open;
+        doorState.targetAngle = doorState.open ? Math.PI * 0.48 : 0;
+        doorState.col.active = !doorState.open;
+        playClickSound(doorState.open ? 320 : 210);
+      },
+      maxDist: 3.4
+    });
+  }
+  const animatedDoors = [];
+
+  // Helper: Safety Railing
+  function makeRailing(x1, z1, x2, z2, yBase, height = 1.05, mat = matWhiteSteel, solid = true) {
+    const dx = x2 - x1, dz = z2 - z1;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.1) return;
+    const angle = Math.atan2(dx, dz);
+    const group = new THREE.Group();
+    group.position.set((x1 + x2) / 2, yBase, (z1 + z2) / 2);
+    group.rotation.y = angle;
+
+    // Top & mid rails
+    const railGeo = new THREE.BoxGeometry(0.05, 0.05, len);
+    const topRail = new THREE.Mesh(railGeo, mat);
+    topRail.position.y = height;
+    const midRail = new THREE.Mesh(railGeo, mat);
+    midRail.position.y = height * 0.52;
+    group.add(topRail, midRail);
+
+    // Posts
+    const postCount = Math.max(2, Math.floor(len / 1.8) + 1);
+    const postGeo = new THREE.BoxGeometry(0.05, height, 0.05);
+    for (let i = 0; i < postCount; i++) {
+      const p = new THREE.Mesh(postGeo, mat);
+      p.position.set(0, height / 2, -len / 2 + (len * i) / (postCount - 1));
+      group.add(p);
+    }
+    shipGroup.add(group);
+
+    if (solid) {
+      const minX = Math.min(x1, x2) - 0.1;
+      const maxX = Math.max(x1, x2) + 0.1;
+      const minZ = Math.min(z1, z2) - 0.1;
+      const maxZ = Math.max(z1, z2) + 0.1;
+      addCollider(minX, maxX, yBase, yBase + height + 0.3, minZ, maxZ);
+    }
+  }
+
+  // Helper: Walkable Staircase along Z (from zStart@yStart to zEnd@yEnd)
+  function makeStaircaseZ(xCenter, width, zStart, yStart, zEnd, yEnd, stepMat = matDarkSteel) {
+    const steps = Math.max(8, Math.round(Math.abs(yEnd - yStart) * 4.5));
+    const dz = (zEnd - zStart) / steps;
+    const dy = (yEnd - yStart) / steps;
+    const stepDepth = Math.abs(dz) * 1.15;
+
+    for (let i = 0; i < steps; i++) {
+      const sy = yStart + dy * (i + 0.5);
+      const sz = zStart + dz * (i + 0.5);
+      makeBox(width, 0.08, stepDepth, xCenter, sy, sz, stepMat, { castShadow: true, receiveShadow: true });
+    }
+    // Side stringers & handrails
+    const len = Math.hypot(zEnd - zStart, yEnd - yStart);
+    const pitch = Math.atan2(yEnd - yStart, zEnd - zStart);
+    [-width / 2, width / 2].forEach(ox => {
+      const stringer = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, len), stepMat);
+      stringer.position.set(xCenter + ox, (yStart + yEnd) / 2 - 0.06, (zStart + zEnd) / 2);
+      stringer.rotation.x = -pitch;
+      shipGroup.add(stringer);
+
+      const handrail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, len), matSafetyYellow);
+      handrail.position.set(xCenter + ox, (yStart + yEnd) / 2 + 0.92, (zStart + zEnd) / 2);
+      handrail.rotation.x = -pitch;
+      shipGroup.add(handrail);
+    });
+
+    // Register smooth walkable ramp
+    const minZ = Math.min(zStart, zEnd);
+    const maxZ = Math.max(zStart, zEnd);
+    const yAtMinZ = zStart < zEnd ? yStart : yEnd;
+    const yAtMaxZ = zStart < zEnd ? yEnd : yStart;
+    addRamp(xCenter - width / 2 - 0.1, xCenter + width / 2 + 0.1, minZ - 0.25, maxZ + 0.25, 'z', yAtMinZ, yAtMaxZ);
+  }
+
+  // Helper: Room Doorway Nameplate Sign
+  function makeSign(text, x, y, z, rotY = 0, bg = '#0f2744', fg = '#ffffff') {
+    const tex = makeCanvasTexture(384, 72, (ctx, w, h) => {
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#6ec1ff';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(3, 3, w - 6, h - 6);
+      ctx.fillStyle = fg;
+      ctx.font = 'bold 26px "Microsoft JhengHei", Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, w / 2, h / 2);
+    });
+    const sign = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.15, 0.22),
+      new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide })
+    );
+    sign.position.set(x, y, z);
+    sign.rotation.y = rotY;
+    shipGroup.add(sign);
+  }
+
+  // Helper: Interior Ceiling Light
+  function addInteriorLight(x, y, z, intensity = 0.85, distance = 16, color = 0xfff3dd) {
+    const bulb = new THREE.Mesh(
+      new THREE.BoxGeometry(0.9, 0.08, 0.22),
+      new THREE.MeshBasicMaterial({ color })
+    );
+    bulb.position.set(x, y, z);
+    shipGroup.add(bulb);
+    const light = new THREE.PointLight(color, intensity, distance, 1.4);
+    light.position.set(x, y - 0.25, z);
+    shipGroup.add(light);
+    interiorLights.push(light);
+    return light;
+  }
+
+  // =========================================================================
+  // 4. BUILD THE CARGO SHIP (Based on Real 104m Feeder Container Ship GA Plan)
+  // =========================================================================
+
+  // --- 4A. HULL (Bow -54 to Stern +48, Beam 18m) ---
+  function buildHull() {
+    // Main hull outer shell (hollow so below-waterline interior compartments have ZERO red hull clipping!)
+    // Port & Starboard upper navy hull sides (z = -38 to +48, y = 0.0 to 4.1)
+    makeBox(1.2, 4.2, 86, -8.8, 2.0, 5, matHullDark, { solid: true });
+    makeBox(1.2, 4.2, 86, 8.8, 2.0, 5, matHullDark, { solid: true });
+    // Port & Starboard lower antifouling red hull sides (y = -4.2 to 0.0)
+    makeBox(1.2, 4.2, 86, -8.8, -2.1, 5, matHullRed);
+    makeBox(1.2, 4.2, 86, 8.8, -2.1, 5, matHullRed);
+    // Double-bottom keel plate (strictly below Tank Top y = -2.35 so it never pokes into Engine Room or Pipe Tunnel!)
+    makeBox(18.6, 1.8, 86, 0, -3.35, 5, matHullRed);
+    // Stern transom (upper navy + lower red)
+    makeBox(18.6, 4.2, 1.2, 0, 2.0, 48.0, matHullDark, { solid: true });
+    makeBox(18.6, 4.2, 1.2, 0, -2.1, 48.0, matHullRed);
+
+    // Tapered Bow Section (z = -38 to -55): HOLLOW U-shaped outer shell so Bosun's Store & Bow Thruster Room are 100% unobstructed!
+    const bowShellShape = new THREE.Shape();
+    bowShellShape.moveTo(-9.0, 0);
+    bowShellShape.quadraticCurveTo(-8.2, 10, 0, 17);
+    bowShellShape.quadraticCurveTo(8.2, 10, 9.0, 0);
+    bowShellShape.lineTo(8.1, 0);
+    bowShellShape.quadraticCurveTo(7.3, 9.4, 0, 15.7);
+    bowShellShape.quadraticCurveTo(-7.3, 9.4, -8.1, 0);
+    bowShellShape.closePath();
+
+    const bowUpper = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(bowShellShape, { depth: 6.0, bevelEnabled: false }),
+      matHullDark
+    );
+    bowUpper.rotation.x = -Math.PI / 2;
+    bowUpper.position.set(0, 0.0, -38);
+    bowUpper.receiveShadow = true;
+    bowUpper.castShadow = true;
+    shipGroup.add(bowUpper);
+
+    const bowLower = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(bowShellShape, { depth: 3.8, bevelEnabled: false }),
+      matHullRed
+    );
+    bowLower.rotation.x = -Math.PI / 2;
+    bowLower.position.set(0, -3.8, -38);
+    shipGroup.add(bowLower);
+
+    // Solid bottom keel plate under the bow (below y = -2.35)
+    const bowKeelShape = new THREE.Shape();
+    bowKeelShape.moveTo(-9.0, 0);
+    bowKeelShape.quadraticCurveTo(-8.2, 10, 0, 17);
+    bowKeelShape.quadraticCurveTo(8.2, 10, 9.0, 0);
+    bowKeelShape.closePath();
+    const bowKeel = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(bowKeelShape, { depth: 1.45, bevelEnabled: false }),
+      matHullRed
+    );
+    bowKeel.rotation.x = -Math.PI / 2;
+    bowKeel.position.set(0, -3.8, -38);
+    shipGroup.add(bowKeel);
+
+    // Bulbous Bow protruding underwater
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(2.3, 18, 14), matHullRed);
+    bulb.scale.set(0.75, 0.9, 2.2);
+    bulb.position.set(0, -1.6, -54.5);
+    shipGroup.add(bulb);
+
+    // White Plimsoll / Waterline stripe & Ship Name on Bow
+    const nameTex = makeCanvasTexture(512, 64, (ctx, w, h) => {
+      ctx.fillStyle = '#18304d';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 34px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('PACIFIC HORIZON', w / 2, h / 2);
+    });
+    const nameMat = new THREE.MeshStandardMaterial({ map: nameTex, roughness: 0.5 });
+    const namePort = new THREE.Mesh(new THREE.PlaneGeometry(11, 1.3), nameMat);
+    namePort.position.set(-9.42, 2.6, -31);
+    namePort.rotation.y = -Math.PI / 2;
+    shipGroup.add(namePort);
+    const nameStbd = new THREE.Mesh(new THREE.PlaneGeometry(11, 1.3), nameMat);
+    nameStbd.position.set(9.42, 2.6, -31);
+    nameStbd.rotation.y = Math.PI / 2;
+    shipGroup.add(nameStbd);
+
+    // Main Weather Deck (y = 4.0)
+    // Forward of Superstructure: z = -38 to +24 (with Cargo Hold #1 opening at z = -33..-19, x = -6..+6)
+    makeBox(18.0, 0.4, 5.0, 0, 3.8, -35.5, matDeck, { walkable: true });
+    // Port & Starboard walkways beside Cargo Hold #1
+    makeBox(3.0, 0.4, 14.0, -7.5, 3.8, -26.0, matDeck, { walkable: true });
+    makeBox(3.0, 0.4, 14.0, 7.5, 3.8, -26.0, matDeck, { walkable: true });
+    // Midship & Aft Cargo Deck (z = -19 to +24)
+    makeBox(18.0, 0.4, 43.0, 0, 3.8, 2.5, matDeck, { walkable: true });
+    // Exterior side decks beside superstructure (z = +24 to +41)
+    makeBox(2.0, 0.4, 17.0, -8.2, 3.8, 32.5, matDeck, { walkable: true });
+    makeBox(2.0, 0.4, 17.0, 8.2, 3.8, 32.5, matDeck, { walkable: true });
+    // Aft Mooring Deck (z = +41 to +48)
+    makeBox(18.0, 0.4, 7.0, 0, 3.8, 44.5, matDeck, { walkable: true });
+
+    // Main Deck Bulwarks & Safety Railings
+    makeRailing(-8.8, -38, -8.8, 47.6, 4.0, 1.1);
+    makeRailing(8.8, -38, 8.8, 47.6, 4.0, 1.1);
+    makeRailing(-8.8, 47.6, 8.8, 47.6, 4.0, 1.1);
+
+    // Aft Mooring Winches & Bollards
+    [-5.5, 5.5].forEach(bx => {
+      const winch = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 1.6, 14), matDarkSteel);
+      winch.rotation.z = Math.PI / 2;
+      winch.position.set(bx, 4.65, 45.2);
+      shipGroup.add(winch);
+      addCollider(bx - 0.9, bx + 0.9, 4.0, 5.3, 44.5, 45.9);
+    });
+  }
+
+  // --- 4B. FORECASTLE DECK (Bow, y = 6.0, z = -38 to -54) ---
+  function buildForecastle() {
+    // Walkable Forecastle Deck (approximated with rectangular walkable slabs fitting the bow)
+    addFloor(-8.2, 8.2, -44.0, -38.0, 6.0);
+    addFloor(-6.2, 6.2, -49.0, -44.0, 6.0);
+    addFloor(-3.2, 3.2, -53.2, -49.0, 6.0);
+
+    // Deck surface visual matching bow shape
+    const fDeckShape = new THREE.Shape();
+    fDeckShape.moveTo(-8.8, 0);
+    fDeckShape.quadraticCurveTo(-8.0, 10, 0, 16.5);
+    fDeckShape.quadraticCurveTo(8.0, 10, 8.8, 0);
+    fDeckShape.closePath();
+    const fDeck = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(fDeckShape, { depth: 0.25, bevelEnabled: false }),
+      matDeck
+    );
+    fDeck.rotation.x = -Math.PI / 2;
+    fDeck.position.set(0, 5.78, -38);
+    fDeck.receiveShadow = true;
+    shipGroup.add(fDeck);
+
+    // Forecastle aft bulkhead wall (with stair gaps on port & stbd, and center Bosun's Store watertight door!)
+    makeWallZ(-3.6, 3.6, 4.0, 2.0, -38.0, 0.36, matWhiteSteel, 0.0, 1.4, 2.0);
+    makeDoor(0.0, 4.0, -38.0, 'z', 1.3, 1.95, '船首水手長儲藏室水密門 (Bosun\'s Store)');
+    makeSign('BOSUN STORE 水手長室', 0.0, 5.72, -37.78, 0);
+    makeBox(1.8, 2.0, 0.4, -7.8, 5.0, -38.0, matWhiteSteel, { solid: true });
+    makeBox(1.8, 2.0, 0.4, 7.8, 5.0, -38.0, matWhiteSteel, { solid: true });
+
+    // Twin Stairs from Main Deck (y=4.0, z=-34.5) to Forecastle (y=6.0, z=-38.0)
+    makeStaircaseZ(-5.4, 1.8, -34.5, 4.0, -38.0, 6.0);
+    makeStaircaseZ(5.4, 1.8, -34.5, 4.0, -38.0, 6.0);
+
+    // Forecastle Railings around bow curve
+    const bowPts = [
+      [-8.6, -38], [-8.0, -43.5], [-6.2, -48.5], [-3.2, -52.5], [0, -54.2],
+      [3.2, -52.5], [6.2, -48.5], [8.0, -43.5], [8.6, -38]
+    ];
+    for (let i = 0; i < bowPts.length - 1; i++) {
+      makeRailing(bowPts[i][0], bowPts[i][1], bowPts[i+1][0], bowPts[i+1][1], 6.0, 1.1);
+    }
+    makeRailing(-3.6, -38.0, 3.6, -38.0, 6.0, 1.05);
+
+    // Anchor Windlasses & Chains
+    [-3.0, 3.0].forEach(wx => {
+      makeBox(1.8, 1.1, 1.5, wx, 6.55, -44.5, matDarkSteel, { solid: true });
+      const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 2.1, 14), matSafetyYellow);
+      drum.rotation.z = Math.PI / 2;
+      drum.position.set(wx, 6.75, -44.5);
+      shipGroup.add(drum);
+      // Anchor chain running forward to hawse pipe
+      const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 3.6, 8), matDarkSteel);
+      chain.rotation.x = Math.PI / 2.2;
+      chain.position.set(wx * 0.9, 6.25, -46.6);
+      shipGroup.add(chain);
+    });
+
+    // Foremast with Masthead Navigation Light
+    const foremast = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.28, 10.5, 12), matWhiteSteel);
+    foremast.position.set(0, 11.2, -49.5);
+    foremast.castShadow = true;
+    shipGroup.add(foremast);
+    addCollider(-0.4, 0.4, 6.0, 12.0, -49.9, -49.1);
+    const mastLight = new THREE.PointLight(0xffffff, 0.7, 25);
+    mastLight.position.set(0, 16.4, -49.5);
+    shipGroup.add(mastLight);
+    exteriorFloodLights.push(mastLight);
+  }
+
+  // --- 4C. CARGO HOLDS & ISO SHIPPING CONTAINERS ---
+  function buildCargoArea() {
+    const containerPalette = [
+      { color: '#1b6ca8', name: 'MAERSK' },
+      { color: '#1e7b47', name: 'EVERGREEN' },
+      { color: '#d48c00', name: 'HAPAG-LLOYD' },
+      { color: '#b52b27', name: 'COSCO' },
+      { color: '#c2185b', name: 'ONE' },
+      { color: '#2b4c7e', name: 'CMA CGM' },
+      { color: '#455a64', name: 'MSC' }
+    ];
+    const containerMats = containerPalette.map(p =>
+      new THREE.MeshStandardMaterial({ map: makeContainerTexture(p.color, p.name), roughness: 0.55, metalness: 0.35 })
+    );
+
+    // --- BAY 1 (Forward, z = -33 to -19): OPEN CARGO HOLD with Cell Guides! ---
+    // Coaming walls around Hold #1
+    makeBox(12.4, 1.2, 0.35, 0, 4.6, -33.0, matHatchCover, { solid: true });
+    makeBox(12.4, 1.2, 0.35, 0, 4.6, -19.0, matHatchCover, { solid: true });
+    makeBox(0.35, 1.2, 14.0, -6.0, 4.6, -26.0, matHatchCover, { solid: true });
+    makeBox(0.35, 1.2, 14.0, 6.0, 4.6, -26.0, matHatchCover, { solid: true });
+    // Deep Cargo Hold Floor (Tank Top at y = -2.0) & Inner Bulkheads
+    makeBox(12.0, 0.4, 14.0, 0, -2.2, -26.0, matDarkSteel);
+    makeBox(12.0, 6.2, 0.3, 0, 1.0, -32.9, matDarkSteel);
+    makeBox(12.0, 6.2, 0.3, 0, 1.0, -19.1, matDarkSteel);
+    makeBox(0.3, 6.2, 14.0, -5.9, 1.0, -26.0, matDarkSteel);
+    makeBox(0.3, 6.2, 14.0, 5.9, 1.0, -26.0, matDarkSteel);
+    // Vertical Cell Guides & partial containers inside Hold #1
+    for (let cx = -4.2; cx <= 4.2; cx += 2.8) {
+      const guide = new THREE.Mesh(new THREE.BoxGeometry(0.14, 6.6, 0.14), matSafetyYellow);
+      guide.position.set(cx, 1.2, -32.5);
+      shipGroup.add(guide);
+      const guide2 = guide.clone();
+      guide2.position.set(cx, 1.2, -19.5);
+      shipGroup.add(guide2);
+    }
+    // Containers sitting down inside Hold #1
+    for (let row = 0; row < 4; row++) {
+      const mat = containerMats[row % containerMats.length];
+      makeBox(2.44, 2.59, 12.19, -4.1 + row * 2.72, -0.7, -26.0, mat);
+      if (row === 1 || row === 2) {
+        makeBox(2.44, 2.59, 12.19, -4.1 + row * 2.72, 1.92, -26.0, containerMats[(row + 3) % containerMats.length]);
+      }
+    }
+
+    // --- BAY 2 (z = -15 to -1) & BAY 3 (z = +4 to +18): Closed Hatch Covers + Stacked 40ft Containers ---
+    const bays = [
+      { zCenter: -8.0, tiers: [2, 2, 2, 2, 2] },
+      { zCenter: 11.0, tiers: [2, 3, 2, 3, 2] }
+    ];
+    let cIdx = 0;
+    bays.forEach(bay => {
+      // Pontoon Hatch Cover
+      makeBox(13.2, 0.85, 13.4, 0, 4.42, bay.zCenter, matHatchCover, { solid: true });
+      // 5 rows across (each ISO 40ft container is 2.44m wide x 2.59m high x 12.19m long)
+      for (let r = 0; r < 5; r++) {
+        const cx = -5.2 + r * 2.6;
+        const maxTier = bay.tiers[r];
+        for (let t = 0; t < maxTier; t++) {
+          const cy = 4.85 + 1.3 + t * 2.62;
+          const mat = containerMats[(cIdx++) % containerMats.length];
+          makeBox(2.44, 2.59, 12.19, cx, cy, bay.zCenter, mat, { solid: t === 0 });
+        }
+      }
+    });
+
+    // Deck Cargo Crane (Midship between Bay 1 & Bay 2 at z = -17.0, Starboard offset like real feeder ships)
+    const craneX = 5.4, craneZ = -17.0;
+    const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.15, 7.5, 14), matSafetyYellow);
+    ped.position.set(craneX, 7.75, craneZ);
+    ped.castShadow = true;
+    shipGroup.add(ped);
+    addCollider(craneX - 1.2, craneX + 1.2, 4.0, 10.0, craneZ - 1.2, craneZ + 1.2);
+    // Crane cab & jib boom
+    makeBox(2.0, 2.2, 2.2, craneX, 12.4, craneZ, matSafetyYellow);
+    const jib = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.85, 19.0), matSafetyYellow);
+    jib.position.set(craneX - 2.5, 16.5, craneZ + 7.5);
+    jib.rotation.x = -0.35;
+    jib.rotation.y = -0.22;
+    jib.castShadow = true;
+    shipGroup.add(jib);
+  }
+
+  // --- 4D. ENGINE ROOM (y = -2.0 Main Engine Floor & y = 1.0 Engine Control Room) ---
+  let mainEngineFlywheel = null;
+  let steeringTiller = null;
+  function buildEngineRoom() {
+    // Engine Room Enclosure: x = -7.8 to +7.2, z = +24 to +42, y = -2.0 to +4.0
+    // Tank Top / Main Engine Floor (y = -2.0)
+    makeBox(15.0, 0.3, 18.0, -0.3, -2.15, 33.0, matGrate, { walkable: true });
+    // Watertight Bulkheads
+    // Forward bulkhead (z = 24.0) with Watertight Door to 62m Under-Deck Pipe Tunnel at x = -6.9, y = -2.0!
+    makeWallZ(-7.8, 7.2, -2.0, 6.0, 24.0, 0.3, matDarkSteel, -6.9, 1.4, 2.2);
+    makeDoor(-6.9, -2.0, 24.0, 'z', 1.3, 2.15, '甲板下管路通道水密門 (Pipe Tunnel)', 0x8b2323);
+    makeSign('PIPE TUNNEL 管路通道 → 船首', -6.9, 0.42, 24.2, 0, '#5a1e1e', '#ffd54f');
+
+    // Aft bulkhead (z = 42.0): solid below y=1.0, doorway at x=+3.6, y=1.0 to Steering Gear Room!
+    makeBox(15.0, 3.0, 0.3, -0.3, -0.5, 42.0, matDarkSteel, { solid: true });
+    makeWallZ(-7.8, 7.2, 1.0, 3.0, 42.0, 0.3, matDarkSteel, 3.6, 1.4, 2.2);
+    makeDoor(3.6, 1.0, 42.0, 'z', 1.3, 2.15, '舵機艙水密門 (Steering Gear Room)', 0x8b2323);
+    makeSign('STEERING GEAR 舵機艙', 3.6, 3.42, 41.8, Math.PI, '#5a1e1e', '#ffd54f');
+
+    makeBox(0.3, 6.2, 18.0, -7.8, 1.0, 33.0, matDarkSteel, { solid: true });
+    makeBox(0.3, 6.2, 18.0, 7.2, 1.0, 33.0, matDarkSteel, { solid: true });
+
+    // Intermediate Platform / Engine Control Room Deck (y = 1.0, z = +35 to +42)
+    makeBox(15.0, 0.25, 7.0, -0.3, 0.88, 38.5, matGrate, { walkable: true });
+    // Safety railing along open edge of platform overlooking Main Engine (x = +2.5 to +4.7)
+    makeRailing(2.5, 35.1, 4.7, 35.1, 1.0, 1.05, matSafetyYellow);
+
+    // Engine Control Room (ECR) Glass-Fronted Room (x = -7.1 to +2.5, z = +35 to +41.8, y = 1.0 to 3.9)
+    // Glass observation window facing forward (-Z) overlooking the Main Engine
+    makeBox(9.6, 1.0, 0.16, -2.3, 1.5, 35.0, matDarkSteel, { solid: true });
+    const ecrGlass = new THREE.Mesh(new THREE.BoxGeometry(9.2, 1.7, 0.06), matGlass);
+    ecrGlass.position.set(-2.3, 2.85, 35.0);
+    shipGroup.add(ecrGlass);
+    addCollider(-7.1, 2.5, 1.0, 3.8, 34.85, 35.15);
+    // ECR East Wall with doorway to starboard catwalk (at z = 37.5)
+    makeWallX(35.0, 42.0, 1.0, 2.9, 2.5, 0.18, matInteriorWall, 37.5, 1.5, 2.2);
+    makeDoor(2.5, 1.0, 37.5, 'x', 1.4, 2.15, '機艙控制室 (ECR) 隔音門');
+
+    // ECR Console & Main Switchboard
+    makeBox(6.4, 1.05, 0.85, -3.5, 1.52, 35.8, matDarkSteel, { solid: true });
+    // Glowing monitor panels on ECR console
+    for (let i = 0; i < 4; i++) {
+      const scr = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.85, 0.5),
+        new THREE.MeshBasicMaterial({ color: i % 2 ? 0x00d48a : 0x29b6f6 })
+      );
+      scr.position.set(-5.6 + i * 1.4, 2.22, 35.95);
+      scr.rotation.x = -0.35;
+      shipGroup.add(scr);
+    }
+    // Main Electrical Switchboard along Port wall
+    makeBox(0.7, 2.2, 4.6, -6.7, 2.1, 38.6, matDarkSteel, { solid: true });
+
+    // Staircase DOWN from Deck A (y=4.0, z=35.0) to ECR (y=1.0, z=40.0) at x = -1.1
+    makeStaircaseZ(-1.1, 1.7, 35.0, 4.0, 40.0, 1.0);
+
+    // Staircase DOWN from ECR Starboard Catwalk (y=1.0, z=35.0) to Main Engine Floor (y=-2.0, z=29.5) at x = +5.6
+    makeStaircaseZ(5.6, 1.7, 35.0, 1.0, 29.5, -2.0);
+
+    // --- MASSIVE 6-CYLINDER 2-STROKE MAIN DIESEL ENGINE (Centerline x=-2..+2, z=25.5..33.5) ---
+    // Crankcase & Engine Block
+    makeBox(3.4, 2.4, 7.6, 0, -0.8, 29.5, matEngineGreen, { solid: true });
+    makeBox(2.6, 1.6, 7.2, 0, 1.1, 29.5, matEngineGreen, { solid: true });
+    // 6 Cylinder Heads on top
+    for (let c = 0; c < 6; c++) {
+      const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.48, 0.85, 14), matDarkSteel);
+      cyl.position.set(0, 2.25, 26.5 + c * 1.18);
+      shipGroup.add(cyl);
+      const valve = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.3, 10), matSafetyYellow);
+      valve.position.set(0, 2.75, 26.5 + c * 1.18);
+      shipGroup.add(valve);
+    }
+    // Exhaust Receiver & Turbocharger
+    const exh = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 7.2, 14), matDarkSteel);
+    exh.rotation.x = Math.PI / 2;
+    exh.position.set(1.65, 1.75, 29.5);
+    shipGroup.add(exh);
+    // Rotating Flywheel & Propeller Shaft running Aft
+    mainEngineFlywheel = new THREE.Group();
+    mainEngineFlywheel.position.set(0, -0.9, 33.6);
+    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.3, 20), matSafetyYellow);
+    wheel.rotation.x = Math.PI / 2;
+    const spoke = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.18, 0.34), matDarkSteel);
+    mainEngineFlywheel.add(wheel, spoke);
+    shipGroup.add(mainEngineFlywheel);
+
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 8.5, 14), matDarkSteel);
+    shaft.rotation.x = Math.PI / 2;
+    shaft.position.set(0, -1.1, 37.8);
+    shipGroup.add(shaft);
+
+    // Auxiliary Diesel Generators (Port side x = -5.5, z = 26..33)
+    [27.2, 31.4].forEach(gz => {
+      makeBox(1.8, 1.5, 3.0, -5.4, -1.25, gz, matPipeBlue, { solid: true });
+    });
+
+    // Color-coded Maritime Piping along Engine Room Bulkheads
+    const addPipe = (x, y, z, len, mat) => {
+      const p = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, len, 10), mat);
+      p.rotation.x = Math.PI / 2;
+      p.position.set(x, y, z);
+      shipGroup.add(p);
+    };
+    addPipe(-6.8, 0.4, 30, 11, matPipeBlue);   // Cooling Seawater
+    addPipe(-6.8, 0.9, 30, 11, matPipeYellow); // Lube Oil
+    addPipe(-6.8, 1.4, 30, 11, matPipeRed);    // Fire Main
+    addPipe(6.8, 2.2, 30, 11, matPipeBlue);
+
+    // Engine Room Workshop (機艙車床修造間: Tank Top Aft-Port x = -7.4..-3.4, z = 36.0..41.4, y = -2.0)
+    makeBox(0.85, 0.95, 2.6, -7.1, -1.52, 38.5, matWood, { solid: true }); // Workbench
+    makeBox(0.9, 1.15, 1.9, -4.6, -1.42, 40.2, matEngineGreen, { solid: true }); // Metal Lathe (車床)
+    makeBox(0.7, 1.4, 0.9, -7.1, -1.3, 40.9, matPipeRed, { solid: true }); // Red Tool Cabinet
+    addInteriorLight(-5.2, 0.65, 38.8, 0.85, 12, 0xffe6b3);
+
+    // Engine Room Industrial Lighting
+    addInteriorLight(-3.5, 3.6, 28, 1.1, 18, 0xffe6b3);
+    addInteriorLight(3.5, 3.6, 28, 1.1, 18, 0xffe6b3);
+    addInteriorLight(-2.5, 3.6, 38, 0.95, 15, 0xd8f0ff); // ECR cool white
+    addInteriorLight(4.5, 3.6, 38, 0.9, 15, 0xffe6b3);
+  }
+
+  // --- 4D-2. STEERING GEAR ROOM (舵機艙, y = 1.0, z = 42.0..47.4) ---
+  function buildSteeringGearRoom() {
+    const y = 1.0;
+    makeBox(14.0, 0.25, 5.4, 0, y - 0.12, 44.7, matGrate, { walkable: true });
+    makeBox(0.25, 3.0, 5.4, -7.0, y + 1.5, 44.7, matDarkSteel, { solid: true });
+    makeBox(0.25, 3.0, 5.4, 7.0, y + 1.5, 44.7, matDarkSteel, { solid: true });
+    makeBox(14.0, 3.0, 0.25, 0, y + 1.5, 47.4, matDarkSteel, { solid: true });
+
+    // Rudder Stock & Animated 4-Ram Hydraulic Steering Tiller (液壓舵機)
+    const rudderCarrier = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.78, 1.1, 16), matEngineGreen);
+    rudderCarrier.position.set(0, y + 0.55, 45.4);
+    shipGroup.add(rudderCarrier);
+    addCollider(-1.8, 1.8, y, y + 1.8, 44.3, 46.5);
+
+    steeringTiller = new THREE.Group();
+    steeringTiller.position.set(0, y + 1.15, 45.4);
+    const tillerArm = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.28, 0.45), matSafetyYellow);
+    const stockCap = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.55, 14), matDarkSteel);
+    steeringTiller.add(tillerArm, stockCap);
+    shipGroup.add(steeringTiller);
+
+    // Hydraulic Ram Cylinders (Port & Stbd)
+    [-2.1, 2.1].forEach(rx => {
+      const ram = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 2.1, 12), matPipeYellow);
+      ram.rotation.x = Math.PI / 2;
+      ram.position.set(rx, y + 1.15, 45.4);
+      shipGroup.add(ram);
+    });
+    // Twin Hydraulic Power Units
+    [-4.8, -2.8].forEach(px => {
+      makeBox(1.1, 1.25, 1.2, px, y + 0.62, 43.8, matPipeBlue, { solid: true });
+    });
+    addInteriorLight(0, y + 2.75, 44.8, 1.0, 15, 0xffe6b3);
+  }
+
+  // --- 4D-3. UNDER-DECK PIPE TUNNEL (甲板下雙層船殼管路通道, 62m long: z = -39.5..+24.0, x = -7.8..-6.0, y = -2.0) ---
+  function buildPipeTunnel() {
+    const y = -2.0, h = 2.75;
+    // Floor & Ceiling of 62m longitudinal tunnel
+    makeBox(1.8, 0.25, 63.5, -6.9, y - 0.12, -7.75, matGrate, { walkable: true });
+    makeBox(1.8, 0.2, 63.5, -6.9, y + h, -7.75, matDarkSteel);
+    // Outer Port Wall & Inner Cargo-Hold Bulkhead Wall
+    makeBox(0.2, h, 63.5, -7.8, y + h / 2, -7.75, matDarkSteel, { solid: true });
+    makeBox(0.2, h, 62.0, -6.0, y + h / 2, -7.0, matDarkSteel, { solid: true });
+    // Sealed vestibule connector between Pipe Tunnel (x=-6.0) and Bow Thruster Room (x=-5.0) at z = -39.5..-38.0
+    makeBox(2.9, h, 0.2, -6.4, y + h / 2, -39.5, matDarkSteel, { solid: true }); // Forward closure
+    makeBox(1.2, 0.25, 1.6, -5.5, y - 0.12, -38.75, matGrate, { walkable: true }); // Vestibule floor
+    makeBox(1.2, 0.2, 1.6, -5.5, y + h, -38.75, matDarkSteel); // Vestibule ceiling
+    makeBox(1.2, h, 0.2, -5.5, y + h / 2, -38.0, matDarkSteel, { solid: true }); // Vestibule aft wall
+
+    // Continuous Color-Coded Maritime Piping along outer tunnel wall
+    [
+      { py: y + 0.55, mat: matPipeBlue },   // Ballast Water Main
+      { py: y + 1.05, mat: matPipeYellow }, // Fuel Transfer Line
+      { py: y + 1.55, mat: matPipeRed }     // Fire Main
+    ].forEach(pipe => {
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 63.0, 10), pipe.mat);
+      mesh.rotation.x = Math.PI / 2;
+      mesh.position.set(-7.58, pipe.py, -7.5);
+      shipGroup.add(mesh);
+    });
+
+    // Structural Web Frames & Industrial Caged Lights every 9 meters
+    for (let fz = -35; fz <= 20; fz += 9) {
+      makeBox(1.75, 0.18, 0.18, -6.9, y + h - 0.12, fz, matSafetyYellow);
+      addInteriorLight(-6.9, y + h - 0.2, fz, 0.75, 13, 0xffdfa8);
+    }
+  }
+
+  // --- 4D-4. BOW COMPARTMENTS (船首水手長儲藏室 Bosun's Store y=3.2 + 船首側推器室 Bow Thruster Room y=-2.0) ---
+  function buildBowCompartments() {
+    // --- A. BOSUN'S STORE (y = 3.2, z = -38.0..-45.6, x = -5.0..+5.0) ---
+    const yB = 3.2;
+    // Entry threshold ramp from Main Deck (y=4.0, z=-38.0) down to Bosun's Store (y=3.2, z=-39.4)
+    makeStaircaseZ(0.0, 1.5, -38.0, 4.0, -39.4, 3.2);
+    // Floor with cutout for stair DOWN to Bow Thruster Room at x = +2.6..+4.4, z = -40.0..-45.2
+    makeBox(7.6, 0.25, 7.6, -1.2, yB - 0.12, -41.8, matGrate, { walkable: true }); // x = -5.0..+2.6
+    makeBox(2.4, 0.25, 2.0, 3.8, yB - 0.12, -39.0, matGrate, { walkable: true });  // z = -38..-40
+    makeBox(0.6, 0.25, 5.6, 4.7, yB - 0.12, -42.8, matGrate, { walkable: true });  // x = +4.4..+5.0
+    // Guardrail around Bow Thruster stair opening
+    makeRailing(2.6, -40.0, 2.6, -45.2, yB, 1.0, matSafetyYellow);
+    makeRailing(2.6, -45.2, 4.4, -45.2, yB, 1.0, matSafetyYellow);
+
+    // Enclosing Bulkheads (staying cleanly inside tapered bow hull!)
+    // Port wall has doorway at z = -38.75, y = -2.0 connecting to the 62m Under-Deck Pipe Tunnel!
+    makeWallX(-45.6, -38.0, -2.0, 3.0, -5.0, 0.25, matDarkSteel, -38.75, 1.4, 2.2);
+    makeDoor(-5.0, -2.0, -38.75, 'x', 1.3, 2.15, '甲板下管路通道水密門 (Pipe Tunnel)', 0x8b2323);
+    makeSign('PIPE TUNNEL 管路通道 → 機艙', -4.82, 0.42, -38.75, Math.PI / 2, '#5a1e1e', '#ffd54f');
+    makeBox(0.25, 5.0, 7.6, -5.0, 3.5, -41.8, matDarkSteel, { solid: true });
+    makeBox(0.25, 8.2, 7.6, 5.0, 1.8, -41.8, matDarkSteel, { solid: true });
+    makeBox(10.0, 8.2, 0.25, 0, 1.8, -45.6, matDarkSteel, { solid: true });
+    makeBox(10.0, 5.2, 0.25, 0, 0.6, -38.0, matDarkSteel, { solid: true }); // Below Bosun's Store aft wall (y=-2..3.2)
+    // Seal upper aft corners of Bosun's Store (x = -5.0..-3.5 and +3.5..+5.0, y = 3.2..6.0) & sides below threshold
+    makeBox(1.6, 2.8, 0.25, -4.25, 4.6, -38.0, matDarkSteel, { solid: true });
+    makeBox(1.6, 2.8, 0.25, 4.25, 4.6, -38.0, matDarkSteel, { solid: true });
+    makeBox(2.9, 0.85, 0.25, -2.2, 3.6, -38.0, matDarkSteel, { solid: true });
+    makeBox(2.9, 0.85, 0.25, 2.2, 3.6, -38.0, matDarkSteel, { solid: true });
+
+    // Twin Vertical Anchor Chain Locker Pipes (錨鏈管 descending from Forecastle windlasses!)
+    [-2.8, 2.0].forEach(cx => {
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 2.8, 12), matDarkSteel);
+      pipe.position.set(cx, yB + 1.4, -44.2);
+      shipGroup.add(pipe);
+      addCollider(cx - 0.36, cx + 0.36, yB, yB + 2.8, -44.56, -43.84);
+    });
+    // Coiled Heavy Mooring Hawsers (纜繩卷) & Paint Drums
+    const ropeMat = new THREE.MeshStandardMaterial({ color: 0xc2a878, roughness: 0.9 });
+    [-3.6, -3.6].forEach((rx, idx) => {
+      const coil = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.45, 14), ropeMat);
+      coil.position.set(rx, yB + 0.22, -40.5 - idx * 1.5);
+      shipGroup.add(coil);
+      addCollider(rx - 0.65, rx + 0.65, yB, yB + 0.6, -40.5 - idx * 1.5 - 0.65, -40.5 - idx * 1.5 + 0.65);
+    });
+    makeBox(1.8, 0.9, 0.7, -3.8, yB + 0.45, -44.8, matWood, { solid: true }); // Bosun workbench
+    addInteriorLight(0, yB + 2.45, -41.8, 0.95, 14, 0xffe6b3);
+
+    // Staircase DOWN from Bosun's Store (y=3.2, z=-40.0) to Bow Thruster Room (y=-2.0, z=-45.2) at x = +3.5
+    makeStaircaseZ(3.5, 1.6, -40.0, 3.2, -45.2, -2.0);
+
+    // --- B. BOW THRUSTER ROOM (船首側推器室: y = -2.0, z = -38.0..-45.6, x = -5.0..+5.0) ---
+    const yT = -2.0;
+    makeBox(10.0, 0.25, 7.6, 0, yT - 0.12, -41.8, matGrate, { walkable: true });
+    // Watertight Door opening into Port Pipe Tunnel at x = -5.0, z = -38.75, y = -2.0!
+    // Remove solid block on port wall? Replace the port wall lower section with a doorway!
+    // (Handled cleanly: let's add the doorway right in the port wall below!)
+    // Giant Transverse Bow Thruster Tunnel & 280kW Vertical Electric Motor
+    const tunnel = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 9.6, 16), matDarkSteel);
+    tunnel.rotation.z = Math.PI / 2;
+    tunnel.position.set(0, yT + 0.75, -42.5);
+    shipGroup.add(tunnel);
+    addCollider(-4.8, 4.8, yT, yT + 1.5, -43.4, -41.6);
+
+    const btMotor = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.82, 2.2, 16), matPipeBlue);
+    btMotor.position.set(0, yT + 2.5, -42.5);
+    shipGroup.add(btMotor);
+    const btCap = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.75, 0.45, 16), matSafetyYellow);
+    btCap.position.set(0, yT + 3.75, -42.5);
+    shipGroup.add(btCap);
+
+    // Steel Overpass Stair Bridge over Bow Thruster Tunnel (跨側推隧道鋼構過橋樓梯 at x = -2.4)
+    makeStaircaseZ(-2.4, 1.35, -40.3, yT, -41.7, -0.15);
+    makeBox(1.35, 0.12, 1.8, -2.4, -0.21, -42.5, matGrate, { walkable: true });
+    makeRailing(-3.08, -41.65, -3.08, -43.35, -0.15, 0.95, matSafetyYellow, false);
+    makeRailing(-1.72, -41.65, -1.72, -43.35, -0.15, 0.95, matSafetyYellow, false);
+    makeStaircaseZ(-2.4, 1.35, -43.3, -0.15, -44.5, yT);
+
+    // Electrical Starter Cabinet (shifted to port corner so forward bridge landing is wide open)
+    makeBox(1.1, 2.0, 0.7, -4.3, yT + 1.0, -44.9, matDarkSteel, { solid: true });
+    addInteriorLight(0, yT + 4.4, -41.0, 1.0, 16, 0xd8f0ff);
+  }
+
+  // --- 4E. SUPERSTRUCTURE — DECK A (Main Deck Accommodation: Mess, Galley, Lobby, y = 4.0) ---
+  function buildDeckA() {
+    const y = 4.0, h = 2.95;
+    // Floor slabs with stairwell cutout for stairs going DOWN to ECR (x = -2.05..-0.15, z = 34.8..40.3)
+    makeBox(14.4, 0.25, 10.8, 0, y - 0.12, 29.4, matInteriorFloor, { walkable: true }); // z = 24..34.8
+    makeBox(5.15, 0.25, 6.2, -4.62, y - 0.12, 37.9, matInteriorFloor, { walkable: true }); // x = -7.2..-2.05
+    makeBox(7.35, 0.25, 6.2, 3.52, y - 0.12, 37.9, matInteriorFloor, { walkable: true });  // x = -0.15..+7.2
+    makeBox(2.0, 0.25, 0.8, -1.1, y - 0.12, 40.6, matInteriorFloor, { walkable: true });
+
+    // Exterior Superstructure Bulkheads (z = 24..41, x = -7.2..+7.2)
+    makeWallZ(-7.2, 7.2, y, h, 24.0, 0.28, matWhiteSteel, 0.0, 1.5, 2.2); // Forward door to cargo deck
+    makeDoor(0.0, y, 24.0, 'z', 1.4, 2.15, '主甲板前艙門');
+
+    makeWallZ(-7.2, 7.2, y, h, 41.0, 0.28, matWhiteSteel, 3.6, 1.5, 2.2); // Aft door to mooring deck
+    makeDoor(3.6, y, 41.0, 'z', 1.4, 2.15, '船尾甲板水密門');
+
+    makeWallX(24.0, 41.0, y, h, -7.2, 0.28, matWhiteSteel, 33.5, 1.5, 2.2); // Port exterior door
+    makeDoor(-7.2, y, 33.5, 'x', 1.4, 2.15, '左舷水密門');
+
+    makeWallX(24.0, 41.0, y, h, 7.2, 0.28, matWhiteSteel, 33.5, 1.5, 2.2); // Starboard exterior door
+    makeDoor(7.2, y, 33.5, 'x', 1.4, 2.15, '右舷水密門');
+
+    // Interior Partitions
+    // Crew Mess Room (Port-Forward: x = -7.0..-1.4, z = 24.2..32.0)
+    makeWallX(24.2, 32.0, y, h, -1.4, 0.16, matInteriorWall);
+    makeWallZ(-7.0, -1.4, y, h, 32.0, 0.16, matInteriorWall, -4.2, 1.5, 2.2);
+
+    // Galley / Ship's Kitchen (Stbd-Forward: x = +1.4..+7.0, z = 24.2..32.0)
+    makeWallX(24.2, 32.0, y, h, 1.4, 0.16, matInteriorWall);
+    makeWallZ(1.4, 7.0, y, h, 32.0, 0.16, matInteriorWall, 4.2, 1.5, 2.2);
+
+    // Guardrail around stairwell going down to Engine Room
+    makeRailing(-2.1, 35.0, -2.1, 40.3, y, 1.0, matSafetyYellow);
+    makeRailing(-2.1, 40.3, -0.1, 40.3, y, 1.0, matSafetyYellow);
+    makeRailing(-0.1, 35.0, -0.1, 40.3, y, 1.0, matSafetyYellow);
+
+    // Staircase UP to Deck B (y=4.0, z=39.2 -> y=7.0, z=34.4) at x = +1.1 (climbs forward into Deck B corridor!)
+    makeStaircaseZ(1.1, 1.7, 39.2, 4.0, 34.4, 7.0);
+
+    // Room Nameplate Signs on Deck A
+    makeSign('CREW MESS 船員餐廳', -4.2, y + 2.42, 32.12, 0);
+    makeSign('GALLEY 船舶廚房', 4.2, y + 2.42, 32.12, 0);
+    makeSign('RECREATION & GYM 交誼廳/健身房', -4.6, y + 2.42, 34.88, Math.PI);
+    makeSign('LAUNDRY & WC 洗衣間/衛浴', 4.48, y + 2.42, 36.8, -Math.PI / 2);
+    makeSign('ENGINE ROOM 機艙下樓', -1.1, y + 2.42, 34.9, 0, '#5a1e1e', '#ffd54f');
+
+    // --- 1. CREW MESS ROOM (船員餐廳: x = -7.0..-1.4, z = 24.2..32.0) ---
+    const matSeat = new THREE.MeshStandardMaterial({ color: 0x26466d, roughness: 0.7 });
+    const matStainless = new THREE.MeshStandardMaterial({ color: 0xcfd8dc, roughness: 0.25, metalness: 0.85 });
+    [-5.3, -2.9].forEach(tx => {
+      makeBox(1.05, 0.76, 2.7, tx, y + 0.38, 28.0, matWood, { solid: true }); // Dining table
+      makeBox(0.36, 0.44, 2.5, tx - 0.78, y + 0.22, 28.0, matSeat, { solid: true }); // Bench L
+      makeBox(0.36, 0.44, 2.5, tx + 0.78, y + 0.22, 28.0, matSeat, { solid: true }); // Bench R
+    });
+    // Self-serve buffet counter, coffee machine & water dispenser along forward wall
+    makeBox(4.2, 0.9, 0.75, -4.2, y + 0.45, 24.75, matStainless, { solid: true });
+    makeBox(0.45, 0.55, 0.4, -5.6, y + 1.18, 24.75, matDarkSteel); // Coffee machine
+    makeBox(0.42, 0.65, 0.4, -2.6, y + 1.22, 24.75, matWhiteSteel); // Water dispenser
+    // Wall TV in Mess Room
+    makeBox(1.5, 0.88, 0.08, -4.2, y + 1.85, 24.28, matDarkSteel);
+    const messTvScreen = new THREE.Mesh(new THREE.PlaneGeometry(1.38, 0.76), new THREE.MeshBasicMaterial({ color: 0x1b4f72 }));
+    messTvScreen.position.set(-4.2, y + 1.85, 24.33);
+    shipGroup.add(messTvScreen);
+
+    // --- 2. GALLEY / SHIP'S KITCHEN (船舶廚房: x = +1.4..+7.0, z = 24.2..32.0) ---
+    // Starboard stainless prep counter & double sink
+    makeBox(0.85, 0.92, 6.2, 6.5, y + 0.46, 28.0, matStainless, { solid: true });
+    // Sink basin + faucet
+    makeBox(0.55, 0.08, 1.1, 6.45, y + 0.93, 29.8, matDarkSteel);
+    makeBox(0.06, 0.32, 0.06, 6.82, y + 1.08, 29.8, matStainless);
+    // Marine 4-Burner Electric Range Stove with Storm Rails (防搖鍋架)
+    makeBox(0.9, 0.92, 1.8, 6.45, y + 0.46, 26.6, matDarkSteel, { solid: true });
+    const burnerMat = new THREE.MeshBasicMaterial({ color: 0xff5722 });
+    [[-0.18, -0.4], [0.18, -0.4], [-0.18, 0.4], [0.18, 0.4]].forEach(([bx, bz]) => {
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.04, 12), burnerMat);
+      b.position.set(6.45 + bx, y + 0.94, 26.6 + bz);
+      shipGroup.add(b);
+    });
+    // Overhead Stainless Exhaust Hood (抽油煙機)
+    makeBox(1.05, 0.55, 2.2, 6.42, y + 2.35, 26.6, matStainless);
+    // Forward Counter & Microwave
+    makeBox(2.2, 0.92, 0.85, 4.3, y + 0.46, 24.8, matStainless, { solid: true });
+    makeBox(0.6, 0.36, 0.42, 4.3, y + 1.1, 24.8, matDarkSteel); // Microwave
+    // Walk-in Cold Provision Store / Commercial Fridge (冷凍/冷藏庫)
+    makeBox(1.3, 2.25, 1.2, 2.25, y + 1.12, 25.0, matStainless, { solid: true });
+    makeSign('COLD STORE 冷凍庫', 2.25, y + 1.75, 25.63, 0, '#0b3c5d', '#80deea');
+    // Center Prep Island
+    makeBox(1.0, 0.9, 2.2, 3.8, y + 0.45, 28.4, matStainless, { solid: true });
+
+    // --- 3. RECREATION ROOM & GYM (交誼廳與健身房: Aft-Port x = -7.0..-2.2, z = 35.0..40.8) ---
+    makeWallZ(-7.0, -2.2, y, h, 35.0, 0.16, matInteriorWall, -4.6, 1.6, 2.2);
+    // Lounge Sofa & Coffee Table
+    makeBox(2.6, 0.65, 0.85, -5.4, y + 0.32, 40.2, matSeat, { solid: true });
+    makeBox(1.5, 0.42, 0.75, -5.4, y + 0.21, 38.8, matWood, { solid: true });
+    // Big Lounge TV on port bulkhead
+    makeBox(0.08, 0.95, 1.7, -7.0, y + 1.65, 38.2, matDarkSteel);
+    const recTv = new THREE.Mesh(new THREE.PlaneGeometry(1.58, 0.84), new THREE.MeshBasicMaterial({ color: 0x1e8449 }));
+    recTv.position.set(-6.95, y + 1.65, 38.2);
+    recTv.rotation.y = Math.PI / 2;
+    shipGroup.add(recTv);
+    // Gym Area: Treadmill (跑步機) & Weight Bench (重訓椅)
+    makeBox(0.85, 0.18, 1.85, -2.95, y + 0.09, 39.2, matDarkSteel, { solid: true }); // Treadmill deck
+    makeBox(0.85, 1.15, 0.22, -2.95, y + 0.65, 40.05, matDarkSteel, { solid: true }); // Treadmill console
+    makeBox(0.55, 0.45, 1.4, -2.95, y + 0.22, 36.8, matSeat, { solid: true }); // Weight bench
+
+    // --- 4. LAUNDRY & WASHROOM (洗衣間與衛浴: Aft-Stbd x = +4.6..+7.0, z = 35.0..40.8) ---
+    makeWallX(35.0, 40.8, y, h, 4.6, 0.16, matInteriorWall, 36.8, 1.4, 2.2);
+    // Washing Machine & Dryer (滾筒洗衣機 & 烘衣機)
+    [35.8, 36.75].forEach((wz, idx) => {
+      makeBox(0.75, 0.92, 0.78, 6.55, y + 0.46, wz, matWhiteSteel, { solid: true });
+      const drumDoor = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.05, 14), matDarkSteel);
+      drumDoor.rotation.z = Math.PI / 2;
+      drumDoor.position.set(6.16, y + 0.48, wz);
+      shipGroup.add(drumDoor);
+    });
+    // Washbasin & Mirror
+    makeBox(0.55, 0.85, 1.1, 6.65, y + 0.42, 38.4, matWhiteSteel, { solid: true });
+    makeBox(0.05, 0.85, 0.95, 7.0, y + 1.45, 38.4, new THREE.MeshStandardMaterial({ color: 0xb0d8f0, metalness: 0.9, roughness: 0.1 }));
+    // Toilet Stall (馬桶隔間)
+    makeBox(0.62, 0.42, 0.48, 6.45, y + 0.21, 40.1, matWhiteSteel, { solid: true });
+    makeBox(0.24, 0.85, 0.48, 6.82, y + 0.42, 40.1, matWhiteSteel);
+
+    // Interior Lights
+    addInteriorLight(-4.2, y + 2.85, 28.0, 0.9, 14);
+    addInteriorLight(4.2, y + 2.85, 28.0, 0.95, 14);
+    addInteriorLight(0.0, y + 2.85, 33.5, 0.85, 16);
+    addInteriorLight(-4.6, y + 2.85, 38.0, 0.85, 13);
+    addInteriorLight(5.8, y + 2.85, 38.0, 0.85, 12);
+    addInteriorLight(3.2, y + 2.85, 38.5, 0.75, 12);
+  }
+
+  // --- 4F. SUPERSTRUCTURE — DECK B (Captain & Officers' Cabins + Lifeboats, y = 7.0) ---
+  function buildDeckB() {
+    const y = 7.0, h = 2.95;
+    // Deck B Floor Slab (x = -7.8..+7.8, z = 23.5..41.0) with cutout for stairs from Deck A (x=+0.15..+2.05, z=34.4..39.6)
+    makeBox(15.6, 0.25, 10.9, 0, y - 0.12, 28.95, matInteriorFloor, { walkable: true }); // z = 23.5..34.4
+    makeBox(7.95, 0.25, 6.6, -3.82, y - 0.12, 37.7, matInteriorFloor, { walkable: true }); // x = -7.8..+0.15
+    makeBox(5.75, 0.25, 6.6, 4.92, y - 0.12, 37.7, matInteriorFloor, { walkable: true });  // x = +2.05..+7.8
+    makeBox(2.0, 0.25, 1.4, 1.1, y - 0.12, 40.3, matInteriorFloor, { walkable: true });
+
+    // Exterior Promenade Railings
+    makeRailing(-7.7, 23.6, 7.7, 23.6, y, 1.05);
+    makeRailing(-7.7, 23.6, -7.7, 40.9, y, 1.05);
+    makeRailing(7.7, 23.6, 7.7, 40.9, y, 1.05);
+    makeRailing(-7.7, 40.9, 7.7, 40.9, y, 1.05);
+
+    // Cabin Block Exterior Walls (x = -6.2..+6.2, z = 25.0..40.9)
+    makeWallZ(-6.2, 6.2, y, h, 25.0, 0.24, matWhiteSteel);
+    makeWallZ(-6.2, 6.2, y, h, 40.9, 0.24, matWhiteSteel);
+    makeWallX(25.0, 40.9, y, h, -6.2, 0.24, matWhiteSteel, 34.0, 1.4, 2.2);
+    makeDoor(-6.2, y, 34.0, 'x', 1.3, 2.15, '左舷救生艇甲板門');
+    makeWallX(25.0, 40.9, y, h, 6.2, 0.24, matWhiteSteel, 34.0, 1.4, 2.2);
+    makeDoor(6.2, y, 34.0, 'x', 1.3, 2.15, '右舷救生艇甲板門');
+
+    // Interior Partitions
+    // Captain's Suite (Port-Forward: x = -6.1..-0.2, z = 25.1..32.5)
+    makeWallX(25.1, 32.5, y, h, -0.2, 0.16, matInteriorWall);
+    makeWallZ(-6.1, -0.2, y, h, 32.5, 0.16, matInteriorWall, -3.0, 1.3, 2.2);
+    makeDoor(-3.0, y, 32.5, 'z', 1.2, 2.15, '船長室門', 0x7c5333);
+
+    // Chief Officer / Ship's Office (Stbd-Forward: x = +0.2..+6.1, z = 25.1..32.5)
+    makeWallZ(-0.2, 6.1, y, h, 32.5, 0.16, matInteriorWall, 3.0, 1.3, 2.2);
+    makeDoor(3.0, y, 32.5, 'z', 1.2, 2.15, '大副室 / 船舶辦公室門', 0x7c5333);
+
+    // Captain's Suite Furniture
+    makeBox(2.1, 0.65, 1.3, -4.8, y + 0.32, 26.4, matWood, { solid: true }); // Bunk
+    makeBox(1.8, 0.15, 1.1, -4.8, y + 0.72, 26.4, matWhiteSteel); // Mattress
+    makeBox(0.45, 0.14, 0.7, -5.5, y + 0.84, 26.4, new THREE.MeshStandardMaterial({ color: 0xe3f2fd })); // Pillow
+    makeBox(1.6, 0.78, 0.85, -1.6, y + 0.39, 26.2, matWood, { solid: true }); // Captain's Desk
+    makeBox(0.55, 0.38, 0.05, -1.6, y + 0.98, 25.95, matDarkSteel); // Monitor
+    makeBox(2.2, 0.65, 0.9, -4.6, y + 0.32, 30.2, new THREE.MeshStandardMaterial({ color: 0x2c4a6e }), { solid: true }); // Sofa
+
+    // Ship's Office Furniture
+    makeBox(2.4, 0.78, 1.2, 3.2, y + 0.39, 28.5, matWood, { solid: true }); // Conference table
+    makeBox(1.8, 0.78, 0.8, 4.8, y + 0.39, 26.0, matWood, { solid: true }); // Office desk
+    makeBox(0.65, 0.42, 0.06, 4.8, y + 1.0, 25.75, matDarkSteel); // Monitor
+
+    // --- HOSPITAL / MEDICAL ROOM (醫務室: Aft-Port x = -6.1..-3.2, z = 35.0..40.7, keeping -3.2..-2.05 open for Bridge stairs!) ---
+    makeWallZ(-6.1, -3.2, y, h, 35.0, 0.16, matInteriorWall, -4.65, 1.3, 2.2);
+    makeWallX(35.0, 40.8, y, h, -3.2, 0.16, matInteriorWall);
+    makeBox(1.1, 0.72, 2.1, -5.3, y + 0.36, 39.2, matWhiteSteel, { solid: true }); // Medical Bed
+    makeBox(0.8, 0.1, 1.1, -5.3, y + 0.76, 39.4, matPipeRed); // Medical blanket
+    makeBox(0.8, 1.4, 0.45, -4.0, y + 1.4, 40.5, matWhiteSteel, { solid: true }); // Medicine cabinet
+    makeSign('✚ HOSPITAL 醫務室', -4.65, y + 2.42, 34.88, Math.PI, '#7f1d1d', '#ffffff');
+
+    // --- CREW CABIN (船員臥室: Aft-Stbd x = +2.3..+6.1, z = 35.0..40.7) ---
+    makeWallZ(2.3, 6.1, y, h, 35.0, 0.16, matInteriorWall, 4.2, 1.3, 2.2);
+    makeWallX(35.0, 40.8, y, h, 2.3, 0.16, matInteriorWall);
+    // Double Bunk Bed (上下舖)
+    makeBox(1.05, 0.55, 2.1, 5.4, y + 0.28, 39.2, matDarkSteel, { solid: true });
+    makeBox(0.95, 0.14, 2.0, 5.4, y + 0.62, 39.2, matWhiteSteel);
+    makeBox(1.05, 0.14, 2.1, 5.4, y + 1.65, 39.2, matDarkSteel);
+    makeBox(0.95, 0.14, 2.0, 5.4, y + 1.78, 39.2, matWhiteSteel);
+    // Crew Wardrobe Locker & Desk
+    makeBox(0.7, 2.0, 1.1, 2.85, y + 1.0, 39.8, matWhiteSteel, { solid: true });
+    makeBox(1.1, 0.76, 0.65, 3.6, y + 0.38, 40.2, matWood, { solid: true });
+    makeSign('CREW CABIN 船員臥室', 4.2, y + 2.42, 34.88, Math.PI);
+
+    // Room Nameplates on Deck B Forward Cabins
+    makeSign('CAPTAIN 船長室', -3.0, y + 2.42, 32.62, 0);
+    makeSign('CHIEF OFFICER 大副/辦公室', 3.0, y + 2.42, 32.62, 0);
+
+    // Guardrail around Deck A arrival stairwell (x = +0.15..+2.05, open at front z = 34.4!)
+    makeRailing(0.15, 34.6, 0.15, 39.6, y, 1.0, matSafetyYellow);
+    makeRailing(2.05, 34.6, 2.05, 39.6, y, 1.0, matSafetyYellow);
+    makeRailing(0.15, 39.6, 2.05, 39.6, y, 1.0, matSafetyYellow);
+
+    // Staircase UP to Deck C Navigation Bridge (y=7.0, z=39.2 -> y=10.0, z=34.4) at x = -1.1 (climbs forward into Wheelhouse!)
+    makeStaircaseZ(-1.1, 1.7, 39.2, 7.0, 34.4, 10.0);
+
+    // Twin Bright Orange Lifeboats on Davits (Port & Starboard)
+    [-8.35, 8.35].forEach(lx => {
+      const boat = new THREE.Mesh(new THREE.CapsuleGeometry(0.95, 4.6, 8, 14), matOrange);
+      boat.rotation.x = Math.PI / 2;
+      boat.position.set(lx, y + 1.5, 30.5);
+      boat.castShadow = true;
+      shipGroup.add(boat);
+    });
+
+    // Interior Lights
+    addInteriorLight(-3.2, y + 2.85, 28.5, 0.9, 13);
+    addInteriorLight(3.2, y + 2.85, 28.5, 0.9, 13);
+    addInteriorLight(0.0, y + 2.85, 34.0, 0.85, 16);
+    addInteriorLight(-4.6, y + 2.85, 38.0, 0.85, 12);
+    addInteriorLight(4.2, y + 2.85, 38.0, 0.85, 12);
+  }
+
+  // --- 4G. SUPERSTRUCTURE — DECK C (Navigation Bridge / Wheelhouse & Bridge Wings, y = 10.0) ---
+  let telegraphHandle = null;
+  let helmWheel = null;
+  let bridgeLights = [];
+
+  function buildNavigationBridgeClean() {
+    const y = 10.0, h = 2.95;
+
+    // Wheelhouse & Aft Lobby Floor (cutout for stairs coming up from Deck B at x=-2.05..-0.15, z=34.4..39.6)
+    makeBox(14.0, 0.25, 9.6, 0, y - 0.12, 29.6, matBridgeFloor, { walkable: true });
+    makeBox(4.8, 0.25, 6.6, -4.45, y - 0.12, 37.7, matDeck, { walkable: true });
+    makeBox(7.0, 0.25, 6.6, 3.35, y - 0.12, 37.7, matDeck, { walkable: true });
+    makeBox(2.0, 0.25, 1.4, -1.1, y - 0.12, 40.3, matBridgeFloor, { walkable: true });
+
+    // Port & Starboard Bridge Wings (x = ±6.8 to ±11.5)
+    makeBox(4.8, 0.25, 4.2, -9.2, y - 0.12, 27.6, matDeck, { walkable: true });
+    makeBox(4.8, 0.25, 4.2, 9.2, y - 0.12, 27.6, matDeck, { walkable: true });
+
+    // Bridge Wing Railings, Docking Consoles & Sidelights
+    [-1, 1].forEach(side => {
+      const xIn = side * 6.8, xOut = side * 11.5;
+      makeRailing(xIn, 25.55, xOut, 25.55, y, 1.1);
+      makeRailing(xIn, 29.65, xOut, 29.65, y, 1.1);
+      makeRailing(xOut, 25.55, xOut, 29.65, y, 1.1);
+      makeBox(0.7, 1.05, 0.7, side * 10.8, y + 0.52, 26.6, matDarkSteel, { solid: true });
+      const navColor = side < 0 ? 0xff2222 : 0x00ff55;
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 10), new THREE.MeshBasicMaterial({ color: navColor }));
+      lamp.position.set(side * 11.55, y + 1.35, 25.6);
+      shipGroup.add(lamp);
+      const navPt = new THREE.PointLight(navColor, 0.9, 12);
+      navPt.position.set(side * 11.6, y + 1.35, 25.4);
+      shipGroup.add(navPt);
+    });
+
+    // Aft External Deck Railings on Deck C
+    makeRailing(-6.8, 40.9, 6.8, 40.9, y, 1.05);
+    makeRailing(-6.8, 34.8, -6.8, 40.9, y, 1.05);
+    makeRailing(6.8, 34.8, 6.8, 40.9, y, 1.05);
+
+    // Wheelhouse Panoramic Front Window Wall (z = 25.0)
+    makeBox(13.8, 1.1, 0.24, 0, y + 0.55, 25.0, matWhiteSteel, { solid: true });
+    makeBox(13.8, 0.45, 0.24, 0, y + 2.75, 25.0, matWhiteSteel, { solid: true });
+    const frontGlass = new THREE.Mesh(new THREE.BoxGeometry(13.4, 1.5, 0.06), matGlass);
+    frontGlass.position.set(0, y + 1.82, 25.0);
+    shipGroup.add(frontGlass);
+    for (let mx = -6.6; mx <= 6.6; mx += 2.2) {
+      makeBox(0.12, 1.55, 0.16, mx, y + 1.82, 25.0, matDarkSteel);
+    }
+
+    // Wheelhouse Side Walls (x = ±6.8, z = 25..34.8) with Bridge Wing Doors
+    makeWallX(25.0, 34.8, y, h, -6.8, 0.22, matWhiteSteel, 27.6, 1.4, 2.2);
+    makeDoor(-6.8, y, 27.6, 'x', 1.3, 2.15, '左舷駕駛台翼門');
+    makeWallX(25.0, 34.8, y, h, 6.8, 0.22, matWhiteSteel, 27.6, 1.4, 2.2);
+    makeDoor(6.8, y, 27.6, 'x', 1.3, 2.15, '右舷駕駛台翼門');
+
+    // Wheelhouse Aft Wall (z = 34.8): Left of stairwell (-6.8..-2.2) with door to Port SOLAS Rooms, Right (0.2..6.8) with door to Compass Stairs
+    makeWallZ(-6.8, -2.2, y, h, 34.8, 0.22, matWhiteSteel, -2.9, 1.3, 2.2);
+    makeDoor(-2.9, y, 34.8, 'z', 1.2, 2.15, '左舷應急發電機/CO₂室門');
+    makeWallZ(0.2, 6.8, y, h, 34.8, 0.22, matWhiteSteel, 3.2, 1.5, 2.2);
+    makeDoor(3.2, y, 34.8, 'z', 1.4, 2.15, '羅經甲板樓梯門');
+
+    // SOLAS Safety Rooms on Deck C Aft-Port (x = -6.7..-3.7, z = 35.0..40.6, leaving x = -3.7..-2.2 walkway!)
+    makeWallX(35.0, 37.8, y, h, -3.7, 0.2, matWhiteSteel, 36.4, 1.2, 2.15);
+    makeWallZ(-6.7, -3.7, y, h, 37.8, 0.18, matWhiteSteel);
+    makeSign('EMERG. GEN 應急發電機室', -3.56, y + 2.35, 36.4, Math.PI / 2, '#b71c1c', '#ffeb3b');
+    // Emergency Diesel Generator (bright orange)
+    makeBox(1.6, 1.35, 2.0, -5.2, y + 0.68, 36.4, matOrange, { solid: true });
+    // CO2 Fire Extinguishing Room (z = 37.8..40.6, open doorway at x = -3.7, z = 39.2)
+    makeWallX(37.8, 40.6, y, h, -3.7, 0.2, matWhiteSteel, 39.2, 1.2, 2.15);
+    makeSign('CO₂ ROOM 二氧化碳滅火室', -3.56, y + 2.35, 39.2, Math.PI / 2, '#b71c1c', '#ffffff');
+    // Bank of High-Pressure Red CO2 Cylinders
+    for (let i = 0; i < 6; i++) {
+      const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 1.65, 10), matPipeRed);
+      cyl.position.set(-6.1 + (i % 3) * 0.42, y + 0.82, 38.4 + Math.floor(i / 3) * 1.4);
+      shipGroup.add(cyl);
+    }
+
+    // Enclosed Stairwell House at Aft-Center (x = -2.2..0.2, z = 34.8..40.8)
+    makeWallX(34.8, 40.8, y, h, -2.2, 0.22, matWhiteSteel);
+    makeWallX(34.8, 40.8, y, h, 0.2, 0.22, matWhiteSteel);
+    makeWallZ(-2.2, 0.2, y, h, 40.8, 0.22, matWhiteSteel);
+
+    // Guardrail on Deck C around Stairwell opening (open at front z = 34.4 into Wheelhouse)
+    makeRailing(-2.05, 34.6, -2.05, 39.6, y, 1.0, matSafetyYellow);
+    makeRailing(-0.15, 34.6, -0.15, 39.6, y, 1.0, matSafetyYellow);
+    makeRailing(-2.05, 39.6, -0.15, 39.6, y, 1.0, matSafetyYellow);
+
+    // Exterior Staircase UP to Deck D Compass Deck (y=10.0, z=39.2 -> y=13.0, z=34.4) at x = +5.2 (climbs forward onto Compass Deck!)
+    makeStaircaseZ(5.2, 1.5, 39.2, 10.0, 34.4, 13.0);
+
+    // --- BRIDGE NAVIGATION CONSOLE (Center Forward z = 26.2) ---
+    makeBox(7.2, 1.02, 1.0, 0, y + 0.51, 26.2, matDarkSteel, { solid: true });
+    // Radar Screen (Left of Helm)
+    const radarScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.95), new THREE.MeshBasicMaterial({ map: radarTex }));
+    radarScreen.position.set(-1.6, y + 1.15, 26.35);
+    radarScreen.rotation.x = -0.65;
+    shipGroup.add(radarScreen);
+
+    // ECDIS Electronic Chart Screen (Right of Helm)
+    const ecdisScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.72), new THREE.MeshBasicMaterial({ map: ecdisTex }));
+    ecdisScreen.position.set(1.6, y + 1.15, 26.35);
+    ecdisScreen.rotation.x = -0.65;
+    shipGroup.add(ecdisScreen);
+
+    // Steering Helm Wheel (Center)
+    helmWheel = new THREE.Group();
+    helmWheel.position.set(0, y + 1.18, 26.75);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.035, 10, 20), matWood);
+    helmWheel.add(rim);
+    for (let i = 0; i < 6; i++) {
+      const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.56, 6), matWood);
+      sp.rotation.z = (i * Math.PI) / 3;
+      helmWheel.add(sp);
+    }
+    shipGroup.add(helmWheel);
+
+    // Interactive Engine Order Telegraph (EOT) Lever
+    const eotBase = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.35, 12), matDarkSteel);
+    eotBase.position.set(0.75, y + 1.15, 26.45);
+    shipGroup.add(eotBase);
+
+    telegraphHandle = new THREE.Group();
+    telegraphHandle.position.set(0.75, y + 1.25, 26.45);
+    const leverRod = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.42, 8), matWhiteSteel);
+    leverRod.position.y = 0.21;
+    const leverKnob = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 10), matPipeRed);
+    leverKnob.position.y = 0.43;
+    telegraphHandle.add(leverRod, leverKnob);
+    shipGroup.add(telegraphHandle);
+
+    interactables.push({
+      mesh: leverKnob,
+      getLabel: () => `切換車鐘檔位 (目前: ${TELEGRAPH_MODES[telegraphIdx].name})`,
+      action: () => {
+        telegraphIdx = (telegraphIdx + 1) % TELEGRAPH_MODES.length;
+        const m = TELEGRAPH_MODES[telegraphIdx];
+        showToast(`車鐘設定：${m.name} (${m.knots.toFixed(1)} 節)`);
+        playBellSound();
+      },
+      maxDist: 3.6
+    });
+
+    // Interactive Helm (Toggle Autopilot / Heading shift)
+    interactables.push({
+      mesh: rim,
+      getLabel: () => '調整舵角 (測試轉舵)',
+      action: () => {
+        helmTargetAngle += Math.PI / 3;
+        shipHeading = (shipHeading + 15) % 360;
+        showToast(`舵令調整：新航向 ${String(shipHeading).padStart(3, '0')}°`);
+        playClickSound(260);
+      },
+      maxDist: 3.5
+    });
+
+    // Chart Table (Aft-Port inside Wheelhouse)
+    makeBox(2.2, 0.92, 1.2, -4.4, y + 0.46, 32.0, matWood, { solid: true });
+    const chartPaper = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.95), new THREE.MeshBasicMaterial({ map: ecdisTex }));
+    chartPaper.rotation.x = -Math.PI / 2;
+    chartPaper.position.set(-4.4, y + 0.94, 32.0);
+    shipGroup.add(chartPaper);
+
+    // Captain's Bridge Chair
+    makeBox(0.65, 0.55, 0.65, -2.6, y + 0.45, 28.0, matDarkSteel, { solid: true });
+
+    // Bridge Overhead Lights
+    bridgeLights.push(addInteriorLight(-3.5, y + 2.85, 29.0, 0.85, 14, 0xfff0d6));
+    bridgeLights.push(addInteriorLight(3.5, y + 2.85, 29.0, 0.85, 14, 0xfff0d6));
+  }
+
+  // --- 4H. DECK D — COMPASS DECK, RADAR MAST & FUNNEL (y = 13.0) ---
+  let radarScanner1 = null, radarScanner2 = null;
+  function buildCompassDeck() {
+    const y = 13.0;
+    // Roof of Wheelhouse = Compass Deck (x = -6.8..+6.8, z = 25.0..40.8)
+    // Cutout for exterior stair landing at x = +4.4..+6.0, z = 34.4..39.6 (open at front z = 34.4!)
+    makeBox(13.6, 0.25, 9.4, 0, y - 0.12, 29.7, matDeck, { walkable: true }); // z = 25..34.4
+    makeBox(11.2, 0.25, 6.4, -1.2, y - 0.12, 37.6, matDeck, { walkable: true }); // x = -6.8..+4.4
+    makeBox(1.6, 0.25, 1.3, 5.2, y - 0.12, 40.25, matDeck, { walkable: true });
+    makeBox(0.8, 0.25, 6.4, 6.4, y - 0.12, 37.6, matDeck, { walkable: true });
+
+    // Compass Deck Safety Railings
+    makeRailing(-6.7, 25.1, 6.7, 25.1, y, 1.1);
+    makeRailing(-6.7, 25.1, -6.7, 40.7, y, 1.1);
+    makeRailing(6.7, 25.1, 6.7, 40.7, y, 1.1);
+    makeRailing(-6.7, 40.7, 6.7, 40.7, y, 1.1);
+    makeRailing(4.4, 34.6, 4.4, 39.6, y, 1.0, matSafetyYellow);
+    makeRailing(4.4, 39.6, 6.0, 39.6, y, 1.0, matSafetyYellow);
+
+    // Magnetic Compass Binnacle
+    const binnacle = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 1.25, 12), matWhiteSteel);
+    binnacle.position.set(0, y + 0.62, 27.0);
+    shipGroup.add(binnacle);
+    addCollider(-0.4, 0.4, y, y + 1.4, 26.6, 27.4);
+
+    // Radar Mast & Rotating X/S-Band Radar Scanners
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.42, 7.5, 12), matWhiteSteel);
+    mast.position.set(0, y + 3.75, 31.2);
+    mast.castShadow = true;
+    shipGroup.add(mast);
+    addCollider(-0.6, 0.6, y, y + 5.0, 30.6, 31.8);
+
+    const yardArm = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.18, 0.18), matWhiteSteel);
+    yardArm.position.set(0, y + 5.2, 31.2);
+    shipGroup.add(yardArm);
+
+    radarScanner1 = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.16, 0.24), matWhiteSteel);
+    radarScanner1.position.set(0, y + 7.65, 31.2);
+    shipGroup.add(radarScanner1);
+
+    radarScanner2 = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.14, 0.2), matSafetyYellow);
+    radarScanner2.position.set(-1.6, y + 5.45, 31.2);
+    shipGroup.add(radarScanner2);
+
+    // Satcom VSAT Radomes
+    [-4.2, 4.2].forEach(sx => {
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(0.75, 16, 12), matWhiteSteel);
+      dome.position.set(sx, y + 1.0, 29.0);
+      shipGroup.add(dome);
+      addCollider(sx - 0.8, sx + 0.8, y, y + 1.8, 28.2, 29.8);
+    });
+
+    // Iconic Ship's Funnel (Smokestack) at Aft Compass Deck (z = 36.2..39.8)
+    makeBox(3.4, 5.2, 3.6, 0, y + 2.6, 38.0, matOrange, { solid: true });
+    makeBox(3.5, 1.1, 3.7, 0, y + 4.9, 38.0, matHullDark); // Top navy band
+    // Twin Exhaust Pipes emerging from funnel top
+    [-0.65, 0.65].forEach(ex => {
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 1.3, 12), matDarkSteel);
+      pipe.position.set(ex, y + 5.8, 38.0);
+      shipGroup.add(pipe);
+    });
+
+    // Deck Floodlights shining forward onto cargo deck
+    [-5.5, 5.5].forEach(fx => {
+      const fl = new THREE.SpotLight(0xfff4d6, 0.0, 90, Math.PI / 3, 0.5, 1.0);
+      fl.position.set(fx, y + 1.2, 25.0);
+      fl.target.position.set(fx * 0.6, 4.0, -15.0);
+      shipGroup.add(fl, fl.target);
+      exteriorFloodLights.push(fl);
+    });
+  }
+
+  // Build All Ship Sections
+  buildHull();
+  buildForecastle();
+  buildCargoArea();
+  buildEngineRoom();
+  buildSteeringGearRoom();
+  buildPipeTunnel();
+  buildBowCompartments();
+  buildDeckA();
+  buildDeckB();
+  buildNavigationBridgeClean();
+  buildCompassDeck();
+
+  // =========================================================================
+  // 5. DYNAMIC OCEAN & SHIP WAKE
+  // =========================================================================
+  const oceanGeo = new THREE.PlaneGeometry(1600, 1600, 96, 96);
+  oceanGeo.rotateX(-Math.PI / 2);
+  const oceanPos = oceanGeo.attributes.position;
+  const oceanBaseY = new Float32Array(oceanPos.count);
+  for (let i = 0; i < oceanPos.count; i++) oceanBaseY[i] = oceanPos.getY(i);
+
+  const oceanMat = new THREE.MeshStandardMaterial({
+    color: 0x0b4870, roughness: 0.22, metalness: 0.35, flatShading: false
+  });
+  // Clip ocean pixels inside the watertight hull footprint so below-waterline compartments stay 100% dry!
+  oceanMat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vOceanWorldPos;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvOceanWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vOceanWorldPos;')
+      .replace(
+        '#include <clipping_planes_fragment>',
+        `#include <clipping_planes_fragment>
+        if (vOceanWorldPos.z > -54.2 && vOceanWorldPos.z < 47.6) {
+          float halfBeam = 8.65;
+          if (vOceanWorldPos.z < -38.0) {
+            float t = clamp((-38.0 - vOceanWorldPos.z) / 16.2, 0.0, 1.0);
+            halfBeam = 8.65 * (1.0 - pow(t, 1.65));
+          }
+          if (abs(vOceanWorldPos.x) < halfBeam) discard;
+        }`
+      );
+  };
+  const oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
+  oceanMesh.receiveShadow = true;
+  scene.add(oceanMesh);
+
+  // Foam wake trailing aft of stern
+  const wakeTex = makeCanvasTexture(128, 256, (ctx, w, h) => {
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, 'rgba(235,248,255,0.65)');
+    grad.addColorStop(0.5, 'rgba(200,235,255,0.28)');
+    grad.addColorStop(1, 'rgba(200,235,255,0.0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+  });
+  const wakeMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(16, 95),
+    new THREE.MeshBasicMaterial({ map: wakeTex, transparent: true, depthWrite: false })
+  );
+  wakeMesh.rotation.x = -Math.PI / 2;
+  wakeMesh.position.set(0, 0.12, 95);
+  scene.add(wakeMesh);
+
+  // Distant Sky / Sun visual disc
+  const sunDisc = new THREE.Mesh(
+    new THREE.SphereGeometry(18, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0xfff6d6 })
+  );
+  sunDisc.position.set(280, 360, -240);
+  scene.add(sunDisc);
+
+  // =========================================================================
+  // 6. SHIP STATE, AUDIO & TIME OF DAY
+  // =========================================================================
+  const TELEGRAPH_MODES = [
+    { name: 'STOP', knots: 0.0, angle: 0.0, rpm: 0.2 },
+    { name: 'SLOW AHEAD', knots: 6.0, angle: -0.35, rpm: 0.8 },
+    { name: 'HALF AHEAD', knots: 12.0, angle: -0.68, rpm: 1.5 },
+    { name: 'FULL AHEAD', knots: 18.5, angle: -1.02, rpm: 2.4 },
+    { name: 'SLOW ASTERN', knots: -5.0, angle: 0.45, rpm: -0.7 }
+  ];
+  let telegraphIdx = 2; // Start at HALF AHEAD (12 kn)
+  let currentKnots = 12.0;
+  let shipHeading = 0;
+  let helmTargetAngle = 0;
+  let oceanScroll = 0;
+
+  // Time of Day: 0 = Day, 1 = Sunset, 2 = Night
+  let todIndex = 0;
+  function applyTimeOfDay(idx) {
+    todIndex = idx % 3;
+    if (todIndex === 0) {
+      scene.background.setHex(0x88b8e6);
+      scene.fog.color.setHex(0x9bc4e8);
+      sunLight.color.setHex(0xfff5e4);
+      sunLight.intensity = 1.35;
+      sunLight.position.set(70, 95, -55);
+      hemiLight.color.setHex(0xbbe0ff);
+      hemiLight.groundColor.setHex(0x2a4058);
+      hemiLight.intensity = 0.72;
+      oceanMat.color.setHex(0x0b4870);
+      sunDisc.visible = true;
+      sunDisc.position.set(280, 360, -240);
+      sunDisc.material.color.setHex(0xfff6d6);
+      exteriorFloodLights.forEach(l => l.intensity = 0.0);
+      bridgeLights.forEach(l => l.color.setHex(0xfff0d6));
+      showToast('環境時間：晴朗白天 (Daylight)');
+    } else if (todIndex === 1) {
+      scene.background.setHex(0xd97b59);
+      scene.fog.color.setHex(0xc86e55);
+      sunLight.color.setHex(0xff9b54);
+      sunLight.intensity = 1.15;
+      sunLight.position.set(-110, 26, -80);
+      hemiLight.color.setHex(0xffb88c);
+      hemiLight.groundColor.setHex(0x22263c);
+      hemiLight.intensity = 0.55;
+      oceanMat.color.setHex(0x163856);
+      sunDisc.visible = true;
+      sunDisc.position.set(-340, 75, -240);
+      sunDisc.material.color.setHex(0xff8844);
+      exteriorFloodLights.forEach(l => l.intensity = 1.1);
+      bridgeLights.forEach(l => l.color.setHex(0xffe0b2));
+      showToast('環境時間：海上黃昏 (Sunset)');
+    } else {
+      scene.background.setHex(0x050c18);
+      scene.fog.color.setHex(0x061020);
+      sunLight.color.setHex(0x6c8eb8);
+      sunLight.intensity = 0.25;
+      sunLight.position.set(50, 90, 40);
+      hemiLight.color.setHex(0x1b2d4a);
+      hemiLight.groundColor.setHex(0x080d14);
+      hemiLight.intensity = 0.32;
+      oceanMat.color.setHex(0x041526);
+      sunDisc.visible = false;
+      exteriorFloodLights.forEach(l => l.intensity = 2.0);
+      // Authentic red night-vision lighting on the Navigation Bridge!
+      bridgeLights.forEach(l => l.color.setHex(0xff3322));
+      showToast('環境時間：夜間航行（駕駛台紅光夜視模式）');
+    }
+  }
+
+  // Procedural Web Audio API Sound Engine
+  let audioCtx = null, engineGain = null, engineOsc = null;
+  function initAudio() {
+    if (audioCtx) return;
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      engineOsc = audioCtx.createOscillator();
+      engineOsc.type = 'sawtooth';
+      engineOsc.frequency.value = 38;
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 110;
+      engineGain = audioCtx.createGain();
+      engineGain.gain.value = 0.03;
+      engineOsc.connect(filter);
+      filter.connect(engineGain);
+      engineGain.connect(audioCtx.destination);
+      engineOsc.start();
+    } catch (e) {}
+  }
+
+  function playClickSound(freq = 280) {
+    if (!audioCtx) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    g.gain.setValueAtTime(0.08, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + 0.13);
+  }
+
+  function playBellSound() {
+    if (!audioCtx) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(980, audioCtx.currentTime);
+    g.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.55);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + 0.56);
+  }
+
+  function playShipHorn() {
+    initAudio();
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    [92, 138.5].forEach(freq => {
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      const f = audioCtx.createBiquadFilter();
+      o.type = 'sawtooth';
+      o.frequency.value = freq;
+      f.type = 'lowpass';
+      f.frequency.value = 340;
+      g.gain.setValueAtTime(0.001, now);
+      g.gain.linearRampToValueAtTime(0.12, now + 0.18);
+      g.gain.setValueAtTime(0.12, now + 1.4);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 2.3);
+      o.connect(f); f.connect(g); g.connect(audioCtx.destination);
+      o.start(now); o.stop(now + 2.35);
+    });
+    showToast('鳴笛：長聲一響 (Ship\'s Horn)');
+  }
+
+  // =========================================================================
+  // 7. FIRST-PERSON PLAYER CONTROLLER & PHYSICS
+  // =========================================================================
+  const player = {
+    pos: new THREE.Vector3(0, 10.0, 29.0), // Spawn inside Navigation Bridge!
+    vel: new THREE.Vector3(),
+    yaw: 0,
+    pitch: -0.05,
+    eyeHeight: 1.65,
+    height: 1.78,
+    radius: 0.34,
+    onGround: false,
+    flashlightOn: false
+  };
+
+  const keys = {};
+  let pointerLocked = false;
+  let gaMapOpen = false;
+
+  const overlay = document.getElementById('overlay');
+  const btnStart = document.getElementById('btn-start');
+  const gaModal = document.getElementById('ga-map');
+  const crosshair = document.getElementById('crosshair');
+  const interactPrompt = document.getElementById('interact-prompt');
+  const toastEl = document.getElementById('toast');
+  let toastTimer = null;
+
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2400);
+  }
+
+  btnStart.addEventListener('click', () => {
+    initAudio();
+    renderer.domElement.requestPointerLock();
+  });
+
+  document.addEventListener('pointerlockchange', () => {
+    pointerLocked = (document.pointerLockElement === renderer.domElement);
+    if (pointerLocked) {
+      overlay.classList.add('hidden');
+      gaMapOpen = false;
+      gaModal.classList.remove('visible');
+    } else if (!gaMapOpen) {
+      overlay.classList.remove('hidden');
+      btnStart.textContent = '繼續探索貨輪';
+    }
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!pointerLocked) return;
+    player.yaw -= e.movementX * 0.0021;
+    player.pitch -= e.movementY * 0.0021;
+    player.pitch = Math.max(-Math.PI * 0.47, Math.min(Math.PI * 0.47, player.pitch));
+  });
+
+  const TELEPORTS = {
+    '1': { pos: [0, 10.0, 29.0], yaw: 0, name: '駕駛台 (Navigation Bridge)' },
+    '2': { pos: [0, 13.0, 28.5], yaw: 0, name: '羅經甲板 (Compass Deck)' },
+    '3': { pos: [0, 7.0, 34.0], yaw: 0, name: 'Deck B 船長與船員層' },
+    '4': { pos: [0, 4.0, 33.5], yaw: 0, name: 'Deck A 餐廳與廚房層' },
+    '5': { pos: [4.2, -2.0, 28.5], yaw: Math.PI / 2, name: '主機艙 (Main Engine Room)' },
+    '6': { pos: [0, 6.0, -42.0], yaw: 0, name: '船首甲板 (Forecastle Deck)' },
+    '7': { pos: [3.2, 1.0, 43.8], yaw: Math.PI / 2, name: '舵機艙 (Steering Gear Room)' },
+    '8': { pos: [-6.9, -2.0, 10.0], yaw: 0, name: '62m 甲板下管路通道 (Pipe Tunnel)' },
+    '9': { pos: [0, 3.2, -41.5], yaw: 0, name: '船首水手長儲藏室 (Bosun\'s Store)' }
+  };
+
+  document.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (e.code === 'KeyM') {
+      gaMapOpen = !gaMapOpen;
+      if (gaMapOpen) {
+        if (pointerLocked) document.exitPointerLock();
+        overlay.classList.add('hidden');
+        gaModal.classList.add('visible');
+        drawGABlueprint();
+      } else {
+        gaModal.classList.remove('visible');
+        renderer.domElement.requestPointerLock();
+      }
+      return;
+    }
+    if (!pointerLocked) return;
+
+    if (e.code === 'KeyF') {
+      player.flashlightOn = !player.flashlightOn;
+      flashlight.intensity = player.flashlightOn ? 2.4 : 0;
+      playClickSound(player.flashlightOn ? 440 : 300);
+      showToast(player.flashlightOn ? '手電筒：開啟' : '手電筒：關閉');
+    } else if (e.code === 'KeyT') {
+      applyTimeOfDay(todIndex + 1);
+    } else if (e.code === 'KeyH') {
+      playShipHorn();
+    } else if (e.code === 'KeyE' && currentTargetInteract) {
+      currentTargetInteract.action();
+    } else if (TELEPORTS[e.key]) {
+      const tp = TELEPORTS[e.key];
+      player.pos.set(tp.pos[0], tp.pos[1], tp.pos[2]);
+      player.vel.set(0, 0, 0);
+      player.yaw = tp.yaw;
+      showToast(`已移動至：${tp.name}`);
+    }
+  });
+
+  document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+  // Ground Height Query (Checks all flat floors & sloped stair ramps near player's Y)
+  function getSupportY(x, z, curY) {
+    let bestY = -999;
+    const stepUpMax = 0.62;
+
+    for (let i = 0; i < floors.length; i++) {
+      const f = floors[i];
+      if (x >= f.minX - 0.12 && x <= f.maxX + 0.12 && z >= f.minZ - 0.12 && z <= f.maxZ + 0.12) {
+        if (f.y <= curY + stepUpMax && f.y > bestY) {
+          bestY = f.y;
+        }
+      }
+    }
+    for (let i = 0; i < ramps.length; i++) {
+      const r = ramps[i];
+      if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) {
+        let t = r.axis === 'z'
+          ? (z - r.minZ) / (r.maxZ - r.minZ)
+          : (x - r.minX) / (r.maxX - r.minX);
+        t = Math.max(0, Math.min(1, t));
+        const ry = r.yStart + t * (r.yEnd - r.yStart);
+        if (ry <= curY + stepUpMax + 0.35 && ry > bestY) {
+          bestY = ry;
+        }
+      }
+    }
+    return bestY;
+  }
+
+  // Horizontal AABB Collision Resolution
+  function resolveHorizontalCollisions(pos) {
+    const r = player.radius;
+    const pMinY = pos.y + 0.25;
+    const pMaxY = pos.y + player.height;
+
+    for (let i = 0; i < colliders.length; i++) {
+      const c = colliders[i];
+      if (!c.active) continue;
+      if (pMaxY <= c.minY || pMinY >= c.maxY) continue;
+
+      const closestX = Math.max(c.minX, Math.min(pos.x, c.maxX));
+      const closestZ = Math.max(c.minZ, Math.min(pos.z, c.maxZ));
+      const dx = pos.x - closestX;
+      const dz = pos.z - closestZ;
+      const distSq = dx * dx + dz * dz;
+
+      if (distSq < r * r) {
+        if (distSq > 1e-6) {
+          const dist = Math.sqrt(distSq);
+          const push = r - dist;
+          pos.x += (dx / dist) * push;
+          pos.z += (dz / dist) * push;
+        } else {
+          // Center inside box: push out along smallest overlap
+          const penLeft = Math.abs(pos.x - c.minX);
+          const penRight = Math.abs(c.maxX - pos.x);
+          const penBack = Math.abs(pos.z - c.minZ);
+          const penFront = Math.abs(c.maxZ - pos.z);
+          const m = Math.min(penLeft, penRight, penBack, penFront);
+          if (m === penLeft) pos.x = c.minX - r;
+          else if (m === penRight) pos.x = c.maxX + r;
+          else if (m === penBack) pos.z = c.minZ - r;
+          else pos.z = c.maxZ + r;
+        }
+      }
+    }
+  }
+
+  // Raycast for Interactables
+  const raycaster = new THREE.Raycaster();
+  let currentTargetInteract = null;
+  function updateInteractionCheck() {
+    raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+    const meshes = interactables.map(it => it.mesh);
+    const hits = raycaster.intersectObjects(meshes, false);
+    currentTargetInteract = null;
+    if (hits.length > 0) {
+      const hit = hits[0];
+      const item = interactables.find(it => it.mesh === hit.object);
+      if (item && hit.distance <= item.maxDist) {
+        currentTargetInteract = item;
+      }
+    }
+    if (currentTargetInteract && pointerLocked) {
+      crosshair.classList.add('active');
+      interactPrompt.textContent = `按 [E] ${currentTargetInteract.getLabel()}`;
+      interactPrompt.classList.add('visible');
+    } else {
+      crosshair.classList.remove('active');
+      interactPrompt.classList.remove('visible');
+    }
+  }
+
+  // =========================================================================
+  // 8. LOCATION DETECTOR & 2D GA BLUEPRINT RENDERER
+  // =========================================================================
+  const locDeckEl = document.getElementById('loc-deck');
+  const locRoomEl = document.getElementById('loc-room');
+  const locCoordsEl = document.getElementById('loc-coords');
+  const shipStatsEl = document.getElementById('ship-stats');
+  const telegraphBadgeEl = document.getElementById('telegraph-badge');
+
+  function detectLocation(p) {
+    if (p.y >= 12.2) return ['DECK D — COMPASS DECK', '羅經甲板 / 雷達桅與煙囪'];
+    if (p.y >= 9.2) {
+      if (Math.abs(p.x) > 6.8) return ['DECK C — BRIDGE WING', p.x < 0 ? '左舷駕駛台翼 (Port Bridge Wing)' : '右舷駕駛台翼 (Stbd Bridge Wing)'];
+      if (p.z > 35.0 && p.x < -3.7) return ['DECK C — SOLAS SAFETY', p.z < 37.8 ? '應急發電機室 (Emergency Gen)' : 'CO₂ 二氧化碳滅火室'];
+      if (p.z > 34.8) return ['DECK C — AFT BRIDGE', '駕駛台後甲板 / 樓梯廳'];
+      return ['DECK C — NAVIGATION BRIDGE', '駕駛台 (Wheelhouse)'];
+    }
+    if (p.y >= 6.5) {
+      if (p.z < -36) return ['FORECASTLE DECK', '船首甲板 (Forecastle)'];
+      if (Math.abs(p.x) > 6.2 || p.z < 25.0) return ['DECK B — BOAT DECK', '救生艇外走廊 (Boat Deck)'];
+      if (p.z < 32.5) return ['DECK B — OFFICERS DECK', p.x < 0 ? '船長室 (Captain\'s Suite)' : '大副室 / 船舶辦公室'];
+      if (p.z > 35.0 && p.x < -3.2) return ['DECK B — MEDICAL', '醫務室 (Hospital)'];
+      if (p.z > 35.0 && p.x > 2.3) return ['DECK B — CREW CABIN', '船員臥室 (Crew Cabin)'];
+      return ['DECK B — ACCOMMODATION', '船員層走廊 (Officers\' Deck)'];
+    }
+    if (p.y >= 2.6) {
+      if (p.z < -38.0 && p.y < 5.2) return ['BOW — BOSUN STORE', '船首水手長儲藏室 (Bosun\'s Store)'];
+      if (p.z < -37) return ['FORECASTLE DECK', '船首樓甲板 (Forecastle)'];
+      if (p.z < 23.8) return ['MAIN DECK — CARGO AREA', '主甲板貨櫃區 (Weather Deck)'];
+      if (p.z > 41.0) return ['MAIN DECK — STERN', '船尾繫泊甲板 (Aft Mooring Deck)'];
+      if (Math.abs(p.x) > 7.2) return ['MAIN DECK — PASSAGE', '舷邊通道 (Side Walkway)'];
+      if (p.z < 32.0 && p.x < -1.4) return ['DECK A — ACCOMMODATION', '船員餐廳 (Crew Mess Room)'];
+      if (p.z < 32.0 && p.x > 1.4) return ['DECK A — ACCOMMODATION', '船舶廚房 (Galley)'];
+      if (p.z > 35.0 && p.x < -2.2) return ['DECK A — RECREATION', '交誼廳與健身房 (Rec Room & Gym)'];
+      if (p.z > 35.0 && p.x > 4.6) return ['DECK A — SANITARY', '洗衣間與衛浴 (Laundry & Washroom)'];
+      return ['DECK A — ACCOMMODATION', '住艙主大廳 (Main Lobby)'];
+    }
+    if (p.y >= 0.2) {
+      if (p.z > 42.0) return ['STERN — STEERING GEAR', '舵機艙 (Steering Gear Room)'];
+      if (p.x < 2.5 && p.z > 35.0) return ['ENGINE ROOM — PLATFORM', '機艙控制室 (Engine Control Room)'];
+      return ['ENGINE ROOM — PLATFORM', '機艙中層通道 (ER Platform)'];
+    }
+    if (p.z < -37.5) return ['BOW — THRUSTER ROOM', '船首側推器室 (Bow Thruster Room)'];
+    if (p.z < 24.0) return ['DOUBLE HULL — PIPE TUNNEL', '62m 甲板下管路通道 (Pipe Tunnel)'];
+    if (p.z > 35.5 && p.x < -3.0) return ['ENGINE ROOM — WORKSHOP', '機艙車床修造間 (ER Workshop)'];
+    return ['ENGINE ROOM — TANK TOP', '主機艙底層 (Main Engine Floor)'];
+  }
+
+  // Draw Real-Style 2D General Arrangement Blueprint (Profile Elevation + Plan View)
+  const gaCanvas = document.getElementById('ga-canvas');
+  const gaCtx = gaCanvas.getContext('2d');
+  function drawGABlueprint() {
+    const ctx = gaCtx, W = gaCanvas.width, H = gaCanvas.height;
+    ctx.fillStyle = '#051324';
+    ctx.fillRect(0, 0, W, H);
+
+    // Blueprint Grid
+    ctx.strokeStyle = 'rgba(55, 130, 220, 0.14)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += 25) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for (let y = 0; y < H; y += 25) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+    // Map ship Z (-56 bow .. +50 stern) to canvas X (right = bow, left = stern — standard maritime GA convention!)
+    const zToX = z => 780 - ((z + 56) / 106) * 680;
+    const yToY = y => 165 - y * 6.5;
+
+    // --- TOP HALF: PROFILE VIEW (Side Elevation) ---
+    ctx.fillStyle = '#6ec1ff';
+    ctx.font = 'bold 12px monospace';
+    ctx.fillText('PROFILE VIEW (SIDE ELEVATION) — BOW RIGHT →', 20, 22);
+
+    // Waterline
+    ctx.strokeStyle = 'rgba(80, 190, 255, 0.45)';
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.moveTo(40, yToY(0)); ctx.lineTo(860, yToY(0)); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Hull Outline
+    ctx.strokeStyle = '#7cc4ff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(zToX(48), yToY(4));
+    ctx.lineTo(zToX(-38), yToY(4));
+    ctx.lineTo(zToX(-38), yToY(6));
+    ctx.lineTo(zToX(-54.5), yToY(6));
+    ctx.lineTo(zToX(-50), yToY(-3.5));
+    ctx.lineTo(zToX(46), yToY(-3.5));
+    ctx.lineTo(zToX(48), yToY(4));
+    ctx.stroke();
+
+    // Superstructure Tiers
+    ctx.strokeRect(zToX(41), yToY(7), zToX(24) - zToX(41), yToY(4) - yToY(7));
+    ctx.strokeRect(zToX(40.5), yToY(10), zToX(25) - zToX(40.5), yToY(7) - yToY(10));
+    ctx.strokeRect(zToX(40.8), yToY(13), zToX(25) - zToX(40.8), yToY(10) - yToY(13));
+    // Funnel
+    ctx.strokeStyle = '#ff9800';
+    ctx.strokeRect(zToX(39.8), yToY(18.2), zToX(36.2) - zToX(39.8), yToY(13) - yToY(18.2));
+    // Cargo Stacks
+    ctx.strokeStyle = '#4dd0e1';
+    ctx.strokeRect(zToX(-1), yToY(10), zToX(-15) - zToX(-1), yToY(4.8) - yToY(10));
+    ctx.strokeRect(zToX(18), yToY(12.5), zToX(4) - zToX(18), yToY(4.8) - yToY(12.5));
+    // Engine Room, Steering Gear, Pipe Tunnel & Bow Compartments in Profile View
+    ctx.strokeStyle = '#66bb6a';
+    ctx.strokeRect(zToX(42), yToY(4), zToX(24) - zToX(42), yToY(-2) - yToY(4));
+    ctx.strokeStyle = '#ffb74d';
+    ctx.strokeRect(zToX(47.4), yToY(4), zToX(42) - zToX(47.4), yToY(1) - yToY(4)); // Steering Gear
+    ctx.strokeStyle = '#ce93d8';
+    ctx.strokeRect(zToX(24), yToY(0.75), zToX(-39.5) - zToX(24), yToY(-2) - yToY(0.75)); // Pipe Tunnel
+    ctx.strokeStyle = '#90caf9';
+    ctx.strokeRect(zToX(-38), yToY(6), zToX(-45.6) - zToX(-38), yToY(3.2) - yToY(6)); // Bosun Store
+    ctx.strokeRect(zToX(-38), yToY(3.2), zToX(-45.6) - zToX(-38), yToY(-2) - yToY(3.2)); // Bow Thruster
+
+    // Labels
+    ctx.fillStyle = '#9fd0f5';
+    ctx.font = '10px monospace';
+    ctx.fillText('STR.GEAR', zToX(47.2), yToY(2.2));
+    ctx.fillText('ENGINE ROOM', zToX(40), yToY(0.5));
+    ctx.fillText('62m PIPE TUNNEL', zToX(10), yToY(-1.2));
+    ctx.fillText('BOSUN', zToX(-38.5), yToY(4.4));
+    ctx.fillText('THRUSTER', zToX(-38.5), yToY(0.2));
+    ctx.fillText('DECK A', zToX(39), yToY(5.2));
+    ctx.fillText('DECK B', zToX(39), yToY(8.2));
+    ctx.fillText('BRIDGE', zToX(39), yToY(11.2));
+    ctx.fillText('BAY 3', zToX(14), yToY(7.5));
+    ctx.fillText('BAY 2', zToX(-5), yToY(7.5));
+    ctx.fillText('HOLD 1', zToX(-23), yToY(1.8));
+    ctx.fillText('FORECASTLE', zToX(-40), yToY(7.2));
+
+    // Player Marker on Profile
+    const px = zToX(player.pos.z), py = yToY(player.pos.y + 0.9);
+    ctx.fillStyle = '#ff3d57';
+    ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+
+    // --- BOTTOM HALF: PLAN VIEW (Top-Down Deck Layout) ---
+    ctx.fillStyle = '#6ec1ff';
+    ctx.font = 'bold 12px monospace';
+    ctx.fillText('PLAN VIEW (TOP-DOWN) — LIVE POSITION & HEADING', 20, 232);
+
+    const xToPlanY = x => 320 + x * 6.2;
+    ctx.strokeStyle = '#7cc4ff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(zToX(48), xToPlanY(-9));
+    ctx.lineTo(zToX(-38), xToPlanY(-9));
+    ctx.quadraticCurveTo(zToX(-48), xToPlanY(-7.5), zToX(-54.5), xToPlanY(0));
+    ctx.quadraticCurveTo(zToX(-48), xToPlanY(7.5), zToX(-38), xToPlanY(9));
+    ctx.lineTo(zToX(48), xToPlanY(9));
+    ctx.closePath();
+    ctx.stroke();
+
+    // Superstructure & Bridge Wings in Plan View
+    ctx.strokeStyle = '#ffffff';
+    ctx.strokeRect(zToX(41), xToPlanY(-7.2), zToX(24) - zToX(41), xToPlanY(7.2) - xToPlanY(-7.2));
+    ctx.strokeStyle = '#ffd54f';
+    ctx.strokeRect(zToX(29.7), xToPlanY(-11.5), zToX(25.5) - zToX(29.7), xToPlanY(11.5) - xToPlanY(-11.5));
+
+    // Cargo Bays in Plan View
+    ctx.strokeStyle = '#4dd0e1';
+    [[-33, -19], [-15, -1], [4, 18]].forEach(([z1, z2]) => {
+      ctx.strokeRect(zToX(z2), xToPlanY(-6.2), zToX(z1) - zToX(z2), xToPlanY(6.2) - xToPlanY(-6.2));
+    });
+
+    // Player Marker + Facing Arrow in Plan View
+    const planX = zToX(player.pos.z), planY = xToPlanY(player.pos.x);
+    ctx.fillStyle = '#ff3d57';
+    ctx.beginPath(); ctx.arc(planX, planY, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+
+    // Facing direction arrow
+    const fx = -Math.sin(player.yaw);
+    const fz = -Math.cos(player.yaw);
+    ctx.strokeStyle = '#ffeb3b';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(planX, planY);
+    ctx.lineTo(planX - fz * 20, planY + fx * 20);
+    ctx.stroke();
+  }
+
+  // =========================================================================
+  // 9. MAIN ANIMATION LOOP
+  // =========================================================================
+  const clock = new THREE.Clock();
+  let hudTimer = 0;
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.05);
+    const elapsed = clock.elapsedTime;
+
+    // 1. Player Movement & Physics
+    if (pointerLocked) {
+      const speed = (keys['ShiftLeft'] || keys['ShiftRight']) ? 7.6 : 4.2;
+      const forwardX = -Math.sin(player.yaw);
+      const forwardZ = -Math.cos(player.yaw);
+      const rightX = Math.cos(player.yaw);
+      const rightZ = -Math.sin(player.yaw);
+
+      let moveX = 0, moveZ = 0;
+      if (keys['KeyW'] || keys['ArrowUp']) { moveX += forwardX; moveZ += forwardZ; }
+      if (keys['KeyS'] || keys['ArrowDown']) { moveX -= forwardX; moveZ -= forwardZ; }
+      if (keys['KeyD'] || keys['ArrowRight']) { moveX += rightX; moveZ += rightZ; }
+      if (keys['KeyA'] || keys['ArrowLeft']) { moveX -= rightX; moveZ -= rightZ; }
+
+      const len = Math.hypot(moveX, moveZ);
+      if (len > 0) {
+        moveX = (moveX / len) * speed;
+        moveZ = (moveZ / len) * speed;
+      }
+
+      player.pos.x += moveX * dt;
+      player.pos.z += moveZ * dt;
+      resolveHorizontalCollisions(player.pos);
+
+      // Vertical Gravity & Floor/Stair Snapping
+      if (keys['Space'] && player.onGround) {
+        player.vel.y = 5.4;
+        player.onGround = false;
+      }
+      player.vel.y -= 16.5 * dt;
+      player.pos.y += player.vel.y * dt;
+
+      const supportY = getSupportY(player.pos.x, player.pos.z, player.pos.y);
+      if (supportY > -900 && player.pos.y <= supportY + 0.08 && player.vel.y <= 0.1) {
+        player.pos.y = supportY;
+        player.vel.y = 0;
+        player.onGround = true;
+      } else {
+        player.onGround = false;
+      }
+
+      // Safety net if somehow falling overboard
+      if (player.pos.y < -6.0) {
+        player.pos.set(0, 4.0, 33.5);
+        player.vel.set(0, 0, 0);
+        showToast('安全保護：已返回主甲板住艙大廳');
+      }
+    }
+
+    // Update Camera Transform
+    camera.position.set(player.pos.x, player.pos.y + player.eyeHeight, player.pos.z);
+    camera.rotation.order = 'YXZ';
+    camera.rotation.y = player.yaw;
+    camera.rotation.x = player.pitch;
+
+    // 2. Animate Doors
+    for (let i = 0; i < animatedDoors.length; i++) {
+      const d = animatedDoors[i];
+      d.curAngle += (d.targetAngle - d.curAngle) * Math.min(1, dt * 8);
+      d.pivot.rotation.y = d.curAngle;
+    }
+
+    // 3. Animate Ship Machinery, Radars, Telegraph, Helm & Ocean
+    const targetMode = TELEGRAPH_MODES[telegraphIdx];
+    currentKnots += (targetMode.knots - currentKnots) * dt * 0.6;
+    oceanScroll += currentKnots * dt * 0.48;
+
+    if (radarScanner1) radarScanner1.rotation.y += dt * 1.8;
+    if (radarScanner2) radarScanner2.rotation.y -= dt * 2.5;
+    if (mainEngineFlywheel) mainEngineFlywheel.rotation.z += dt * targetMode.rpm * 3.2;
+    if (telegraphHandle) {
+      telegraphHandle.rotation.x += (targetMode.angle - telegraphHandle.rotation.x) * Math.min(1, dt * 8);
+    }
+    if (helmWheel) {
+      helmWheel.rotation.z += (helmTargetAngle - helmWheel.rotation.z) * Math.min(1, dt * 5);
+    }
+    if (steeringTiller) {
+      const targetRudder = Math.sin(helmTargetAngle * 0.5) * 0.55;
+      steeringTiller.rotation.y += (targetRudder - steeringTiller.rotation.y) * Math.min(1, dt * 3);
+    }
+
+    // Dynamic Ocean Waves
+    for (let i = 0; i < oceanPos.count; i++) {
+      const ox = oceanPos.getX(i);
+      const oz = oceanPos.getZ(i) - oceanScroll;
+      const wave = Math.sin(ox * 0.035 + elapsed * 1.1) * 0.42
+                 + Math.cos(oz * 0.045 + elapsed * 1.45) * 0.48;
+      oceanPos.setY(i, wave);
+    }
+    oceanPos.needsUpdate = true;
+    wakeMesh.material.opacity = Math.min(0.85, Math.abs(currentKnots) / 14);
+
+    // Engine Sound Volume scales with proximity to Engine Room!
+    if (engineGain && engineOsc) {
+      const erDist = Math.hypot(player.pos.x, (player.pos.y + 1.0) * 1.8, player.pos.z - 31.0);
+      const prox = Math.max(0.015, Math.min(0.14, 1.4 / (erDist + 5)));
+      const rpmFactor = 0.6 + Math.abs(currentKnots) / 18;
+      engineGain.gain.setTargetAtTime(prox * rpmFactor, audioCtx.currentTime, 0.1);
+      engineOsc.frequency.setTargetAtTime(28 + Math.abs(currentKnots) * 1.5, audioCtx.currentTime, 0.15);
+    }
+
+    // Update Radar Display & HUD
+    updateRadarTexture(elapsed);
+    updateInteractionCheck();
+
+    hudTimer += dt;
+    if (hudTimer > 0.15) {
+      hudTimer = 0;
+      const [deckName, roomName] = detectLocation(player.pos);
+      locDeckEl.textContent = deckName;
+      locRoomEl.textContent = roomName;
+      locCoordsEl.textContent = `X: ${player.pos.x.toFixed(1)}m | Y: ${player.pos.y.toFixed(1)}m | Z: ${player.pos.z.toFixed(1)}m`;
+      shipStatsEl.textContent = `航速: ${currentKnots.toFixed(1)} kn | 航向: ${String(shipHeading).padStart(3, '0')}°`;
+      telegraphBadgeEl.textContent = `車鐘: ${targetMode.name}`;
+    }
+
+    renderer.render(scene, camera);
+  }
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // Optional URL query params for deep-linking / automated showcase views (?cam=x,y,z,yaw,pitch&tod=0|1|2&ga=1)
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has('cam')) {
+    const [cx, cy, cz, cyaw, cpitch] = urlParams.get('cam').split(',').map(Number);
+    if (!Number.isNaN(cx)) {
+      player.pos.set(cx, cy, cz);
+      player.yaw = cyaw || 0;
+      player.pitch = cpitch || 0;
+      overlay.classList.add('hidden');
+      const [deckName, roomName] = detectLocation(player.pos);
+      locDeckEl.textContent = deckName;
+      locRoomEl.textContent = roomName;
+      locCoordsEl.textContent = `X: ${cx.toFixed(1)}m | Y: ${cy.toFixed(1)}m | Z: ${cz.toFixed(1)}m`;
+    }
+  }
+  if (urlParams.has('tod')) {
+    applyTimeOfDay(parseInt(urlParams.get('tod'), 10) || 0);
+    toastEl.classList.remove('show');
+  }
+  if (urlParams.get('ga') === '1') {
+    overlay.classList.add('hidden');
+    gaMapOpen = true;
+    gaModal.classList.add('visible');
+    drawGABlueprint();
+  }
+
+  animate();
+})();
+</script>
+</body>
+</html>
