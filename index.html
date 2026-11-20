@@ -1951,9 +1951,11 @@
     pointerLocked = (document.pointerLockElement === renderer.domElement);
     if (pointerLocked) {
       overlay.classList.add('hidden');
+      overlay.style.display = 'none';
       gaMapOpen = false;
       gaModal.classList.remove('visible');
     } else if (!gaMapOpen) {
+      overlay.style.display = '';
       overlay.classList.remove('hidden');
       btnStart.textContent = '繼續探索貨輪';
     }
@@ -1985,6 +1987,7 @@
       if (gaMapOpen) {
         if (pointerLocked) document.exitPointerLock();
         overlay.classList.add('hidden');
+      overlay.style.display = 'none';
         gaModal.classList.add('visible');
         drawGABlueprint();
       } else {
@@ -2435,6 +2438,7 @@
       player.yaw = cyaw || 0;
       player.pitch = cpitch || 0;
       overlay.classList.add('hidden');
+      overlay.style.display = 'none';
       const [deckName, roomName] = detectLocation(player.pos);
       locDeckEl.textContent = deckName;
       locRoomEl.textContent = roomName;
