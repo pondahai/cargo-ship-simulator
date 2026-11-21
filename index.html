@@ -1033,10 +1033,10 @@
     bowKeel.position.set(0, -3.8, -38);
     shipGroup.add(bowKeel);
 
-    // Bulbous Bow protruding underwater
+    // Bulbous Bow protruding underwater (aft edge stops at z=-52.04, strictly forward of Fore Peak Tank wall at z=-51.6!)
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(2.3, 18, 14), matHullRed);
-    bulb.scale.set(0.75, 0.9, 2.2);
-    bulb.position.set(0, -1.6, -54.5);
+    bulb.scale.set(0.72, 0.85, 1.55);
+    bulb.position.set(0, -1.75, -55.6);
     shipGroup.add(bulb);
 
     // White Plimsoll / Waterline stripe & Ship Name on Bow
@@ -1210,6 +1210,7 @@
       handle.position.set(0, 0.045, 0);
       g.add(handle);
       if (axis === 'x') g.rotation.z = -Math.PI / 2;
+      else if (axis === 'z') g.rotation.x = Math.PI / 2;
       shipGroup.add(g);
 
       if (enterCfg) {
@@ -1374,7 +1375,17 @@
       yaw: 0
     });
     makeSign('HOLD #3 ACCESS 三號貨艙口', -4.15, 4.95, 18.8, 0, '#4a2511', '#ffd54f');
-    // Wing Ballast Tank Bolted Manholes on Main Deck side walkways (ALL 4 genuinely enterable into Wing Ballast Tanks!)
+    // Wing Ballast Tank Bolted Manholes on Main Deck side walkways (ALL 6 genuinely enterable into Wing Ballast Tanks!)
+    makeBoltedManhole(-7.5, 4.01, -33.6, 'y', {
+      label: 'WBT NO.1 (P-UPPER) 左舷一號上邊壓載艙',
+      pos: [-7.1, 1.0, -31.8],
+      yaw: Math.PI
+    });
+    makeBoltedManhole(7.5, 4.01, -33.6, 'y', {
+      label: 'WBT NO.1 (S) 右舷一號邊壓載艙',
+      pos: [7.1, -2.0, -31.8],
+      yaw: Math.PI
+    });
     makeBoltedManhole(-7.5, 4.01, -16.5, 'y', {
       label: 'WBT NO.2 (P-UPPER) 左舷前上邊壓載艙',
       pos: [-7.1, 1.0, -15.5],
@@ -1576,13 +1587,15 @@
       );
     });
 
-    // --- C. ALL FOUR WING BALLAST TANKS (舷側雙層殼邊壓載水艙 — Pitch-Black Vertical Side Tanks!) ---
+    // --- C. ALL SIX WING BALLAST TANKS (舷側雙層殼邊壓載水艙 — Pitch-Black Vertical Side Tanks!) ---
     // Port Wing Tanks sit cleanly ABOVE the Pipe Tunnel (y = +1.0..+3.9); Starboard Wing Tanks span full hull depth (y = -2.0..+3.9)!
     [
-      { name: 'WBT NO.2 (P-UPPER) 左舷前上邊壓載艙', side: -1, xMin: -8.1, xMax: -6.1, zMin: -18.2, zMax: -1.2, yBot: 1.0,  yTop: 3.9, ladderZ: -16.5, exitPos: [-7.5, 4.0, -15.3] },
-      { name: 'WBT NO.2 (S) 右舷前邊壓載艙',        side:  1, xMin:  6.1, xMax:  8.1, zMin: -18.2, zMax: -1.2, yBot: -2.0, yTop: 3.9, ladderZ: -16.5, exitPos: [ 7.5, 4.0, -15.3] },
-      { name: 'WBT NO.3 (P-UPPER) 左舷後上邊壓載艙', side: -1, xMin: -8.1, xMax: -6.1, zMin:  3.8,  zMax: 20.2, yBot: 1.0,  yTop: 3.9, ladderZ:  18.8, exitPos: [-7.5, 4.0,  17.6] },
-      { name: 'WBT NO.3 (S) 右舷後邊壓載艙',        side:  1, xMin:  6.1, xMax:  8.1, zMin:  3.8,  zMax: 20.2, yBot: -2.0, yTop: 3.9, ladderZ:  18.8, exitPos: [ 7.5, 4.0,  17.6] }
+      { name: 'WBT NO.1 (P-UPPER) 左舷一號上邊壓載艙', side: -1, xMin: -8.1, xMax: -6.1, zMin: -33.2, zMax: -19.2, yBot: 1.0,  yTop: 3.9, ladderZ: -32.2, exitPos: [-7.5, 4.0, -34.6] },
+      { name: 'WBT NO.1 (S) 右舷一號邊壓載艙',        side:  1, xMin:  6.1, xMax:  8.1, zMin: -33.2, zMax: -19.2, yBot: -2.0, yTop: 3.9, ladderZ: -32.2, exitPos: [ 7.5, 4.0, -34.6] },
+      { name: 'WBT NO.2 (P-UPPER) 左舷前上邊壓載艙', side: -1, xMin: -8.1, xMax: -6.1, zMin: -18.2, zMax: -1.2,  yBot: 1.0,  yTop: 3.9, ladderZ: -16.5, exitPos: [-7.5, 4.0, -15.3] },
+      { name: 'WBT NO.2 (S) 右舷前邊壓載艙',        side:  1, xMin:  6.1, xMax:  8.1, zMin: -18.2, zMax: -1.2,  yBot: -2.0, yTop: 3.9, ladderZ: -16.5, exitPos: [ 7.5, 4.0, -15.3] },
+      { name: 'WBT NO.3 (P-UPPER) 左舷後上邊壓載艙', side: -1, xMin: -8.1, xMax: -6.1, zMin:  3.8,  zMax: 20.2,  yBot: 1.0,  yTop: 3.9, ladderZ:  18.8, exitPos: [-7.5, 4.0,  17.6] },
+      { name: 'WBT NO.3 (S) 右舷後邊壓載艙',        side:  1, xMin:  6.1, xMax:  8.1, zMin:  3.8,  zMax: 20.2,  yBot: -2.0, yTop: 3.9, ladderZ:  18.8, exitPos: [ 7.5, 4.0,  17.6] }
     ].forEach(wt => {
       const xMid = (wt.xMin + wt.xMax) / 2;
       const xW = wt.xMax - wt.xMin;
@@ -1620,6 +1633,73 @@
       );
       makeSign('EXIT ↑ 主甲板人孔', xMid - wt.side * 0.86, wt.yBot + 1.35, wt.ladderZ + (wt.ladderZ < 0 ? 0.95 : -0.95), wt.side < 0 ? -Math.PI / 2 : Math.PI / 2, '#5a1e1e', '#ffd54f');
     });
+
+    // --- D. FORE PEAK TANK (船首尖艙 FPT: forward of Collision Bulkhead z = -46.6..-51.6, x = -2.0..+2.0, y = -2.0..+5.65) ---
+    const yFP = -2.0, hFP = 7.65;
+    makeBox(4.0, 0.16, 5.0, 0, yFP - 0.08, -49.1, matBallastEpoxy, { walkable: true });
+    makeBox(4.0, 0.12, 5.0, 0, yFP + hFP, -49.1, matBallastEpoxy);
+    makeBox(4.0, hFP, 0.2, 0, yFP + hFP / 2, -51.6, matBallastEpoxy, { solid: true }); // Forward stem closure
+    makeBox(4.0, hFP, 0.2, 0, yFP + hFP / 2, -46.6, matBallastEpoxy, { solid: true }); // Collision bulkhead aft face
+    makeBox(0.2, hFP, 5.0, -2.0, yFP + hFP / 2, -49.1, matBallastEpoxy, { solid: true });
+    makeBox(0.2, hFP, 5.0, 2.0, yFP + hFP / 2, -49.1, matBallastEpoxy, { solid: true });
+    // Authentic Bow Panting Beams & Breast Hooks (船首抗拍擊橫梁與強胸肘板)
+    [0.5, 2.5, 4.4].forEach(py => {
+      makeBox(3.8, 0.22, 0.24, 0, py, -49.6, matDarkSteel);
+      makeBox(3.8, 0.22, 0.24, 0, py, -47.8, matDarkSteel);
+    });
+    // Vertical Ballast Fill/Suction Pipe & Zinc Anodes
+    const fpPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, hFP - 0.3, 10), matPipeBlue);
+    fpPipe.position.set(1.4, yFP + hFP / 2, -47.2);
+    shipGroup.add(fpPipe);
+    [-1.75, 1.75].forEach(ax => makeBox(0.08, 0.32, 0.1, ax, yFP + 0.55, -49.2, matZincAnode));
+    // Entry Manhole on Forecastle Deck (y = 6.0) & on Collision Bulkhead inside Bow Thruster Room (z = -46.26)
+    makeBoltedManhole(0.0, 6.02, -47.4, 'y', {
+      label: 'FPT 船首尖艙 (Fore Peak Tank)',
+      pos: [0.0, -2.0, -48.6],
+      yaw: 0
+    });
+    makeBoltedManhole(0.0, -1.0, -46.26, 'z', {
+      label: 'FPT 船首尖艙 (Fore Peak Tank)',
+      pos: [0.0, -2.0, -48.2],
+      yaw: 0
+    });
+    makeSign('FPT 船首尖艙人孔', 0.0, -0.35, -46.24, 0, '#5a1e1e', '#ffd54f');
+    // Vertical Exit Ladders inside Fore Peak Tank (back to Forecastle Deck & Bow Thruster Room)
+    makeVerticalExitLadder(0.0, yFP, yFP + hFP - 0.05, -46.9, 'z', '攀爬直梯返回 船首甲板 (Forecastle Deck)', [0.0, 6.0, -46.2], 0);
+    makeSign('EXIT ↑ 船首甲板人孔', -1.1, yFP + 1.35, -46.78, 0, '#5a1e1e', '#ffd54f');
+    makeVerticalExitLadder(1.3, yFP, yFP + 2.2, -46.9, 'z', '攀爬人孔返回 船首側推器室 (Bow Thruster)', [0.0, -2.0, -45.2], Math.PI);
+
+    // --- E. AFT PEAK TANK (船尾尖艙 APT: directly below Steering Gear Room y = -2.0..+0.92, z = 42.2..47.2, x = -5.5..+5.5) ---
+    const yAP = -2.0, hAP = 2.92;
+    makeBox(11.0, 0.16, 5.0, 0, yAP - 0.08, 44.7, matBallastEpoxy, { walkable: true });
+    makeBox(11.0, 0.12, 5.0, 0, yAP + hAP, 44.7, matBallastEpoxy);
+    makeBox(11.0, hAP, 0.2, 0, yAP + hAP / 2, 42.2, matBallastEpoxy, { solid: true });
+    makeBox(11.0, hAP, 0.2, 0, yAP + hAP / 2, 47.2, matBallastEpoxy, { solid: true });
+    makeBox(0.2, hAP, 5.0, -5.5, yAP + hAP / 2, 44.7, matBallastEpoxy, { solid: true });
+    makeBox(0.2, hAP, 5.0, 5.5, yAP + hAP / 2, 44.7, matBallastEpoxy, { solid: true });
+    // Giant Propeller Stern Tube Bossing (艉軸管) & Vertical Rudder Trunk (舵柱套管)!
+    const sternTube = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.48, 4.8, 16), matDarkSteel);
+    sternTube.rotation.x = Math.PI / 2;
+    sternTube.position.set(0, yAP + 0.85, 44.7);
+    shipGroup.add(sternTube);
+    addCollider(-0.6, 0.6, yAP, yAP + 1.5, 42.3, 47.1);
+    const rudderTrunk = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, hAP, 16), matEngineGreen);
+    rudderTrunk.position.set(0, yAP + hAP / 2, 45.4);
+    shipGroup.add(rudderTrunk);
+    // Transverse Aft Web Frame + Zinc Anodes
+    makeBox(3.4, hAP, 0.16, -3.7, yAP + hAP / 2, 44.7, matBallastEpoxy, { solid: true });
+    makeBox(3.4, hAP, 0.16, 3.7, yAP + hAP / 2, 44.7, matBallastEpoxy, { solid: true });
+    [-3.5, 3.5].forEach(ax => makeBox(0.32, 0.09, 0.08, ax, yAP + 0.55, 44.84, matZincAnode));
+    // Entry Manhole on Steering Gear Room floor (x = 4.2, y = 1.01, z = 45.2)
+    makeBoltedManhole(4.2, 1.01, 45.2, 'y', {
+      label: 'APT 船尾尖艙 (Aft Peak Tank)',
+      pos: [3.6, -2.0, 45.8],
+      yaw: Math.PI / 2
+    });
+    makeSign('APT 船尾尖艙人孔 ↓', 6.82, 2.05, 45.2, -Math.PI / 2, '#5a1e1e', '#ffd54f');
+    // Vertical Exit Ladder inside Aft Peak Tank back up to Steering Gear Room
+    makeVerticalExitLadder(4.2, yAP, yAP + hAP - 0.05, 46.85, 'z', '攀爬直梯返回 舵機艙 (Steering Gear Room)', [4.2, 1.0, 44.0], 0);
+    makeSign('APT EXIT ↑ 舵機艙人孔', 2.8, yAP + 1.35, 47.02, Math.PI, '#5a1e1e', '#ffd54f');
 
     // --- BAY 2 (z = -15 to -1) & BAY 3 (z = +4 to +18): Closed Hatch Covers + Stacked 40ft Containers ---
     const bays = [
@@ -3511,16 +3591,23 @@
       if (p.z > 35.0 && p.x > 4.6) return ['DECK A — SANITARY', '洗衣間與衛浴 (Laundry & Washroom)'];
       return ['DECK A — ACCOMMODATION', '住艙主大廳 (Main Lobby)'];
     }
+    if (p.z < -46.5 && p.y < 5.7) {
+      return ['FORE PEAK TANK — FPT', '船首尖艙 (防撞艙壁前 / 無照明密閉空間)'];
+    }
+    if (p.z > 42.1 && p.y < 0.95) {
+      return ['AFT PEAK TANK — APT', '船尾尖艙 / 艉軸管與舵柱套管 (無照明密閉空間)'];
+    }
     if (p.y < -2.6) {
       const wbtNum = p.z < -17.0 ? 1 : (p.z < 2.0 ? 2 : 3);
       return [`DOUBLE BOTTOM — WBT NO.${wbtNum}`, `船底雙層壓載水艙 NO.${wbtNum} (密閉空間 / 請用手電筒)`];
     }
-    if (p.y < 3.6 && Math.abs(p.x) > 5.95 && Math.abs(p.x) < 8.25 && p.z > -18.5 && p.z < 20.5) {
+    if (p.y < 3.6 && Math.abs(p.x) > 5.95 && Math.abs(p.x) < 8.25 && p.z > -33.5 && p.z < 20.5) {
+      const wingNum = p.z < -18.5 ? 1 : (p.z < 1.0 ? 2 : 3);
       if (p.x > 5.95) {
-        return ['WING BALLAST TANK (STBD)', p.z < 1.0 ? '右舷前邊壓載水艙 WBT NO.2 (S)' : '右舷後邊壓載水艙 WBT NO.3 (S)'];
+        return ['WING BALLAST TANK (STBD)', `右舷邊壓載水艙 WBT NO.${wingNum} (S)`];
       }
       if (p.y > 0.85) {
-        return ['UPPER WING BALLAST TANK (PORT)', p.z < 1.0 ? '左舷前上邊壓載水艙 WBT NO.2 (P)' : '左舷後上邊壓載水艙 WBT NO.3 (P)'];
+        return ['UPPER WING BALLAST TANK (PORT)', `左舷上邊壓載水艙 WBT NO.${wingNum} (P)`];
       }
     }
     if (p.y < 3.6 && p.z > -33.2 && p.z < -18.8 && Math.abs(p.x) < 6.0) {
@@ -3608,11 +3695,13 @@
     [[-33, -19], [-15, -1], [4, 18]].forEach(([z1, z2]) => {
       ctx.strokeRect(zToX(z2), yToY(4), zToX(z1) - zToX(z2), yToY(-2) - yToY(4));
     });
-    // Double-Bottom Water Ballast Tanks (WBT NO.1 / NO.2 / NO.3 at y = -3.85..-2.0)
+    // Double-Bottom Water Ballast Tanks (WBT NO.1 / NO.2 / NO.3) + Fore Peak (FPT) & Aft Peak (APT)
     ctx.strokeStyle = '#29b6f6';
     [[-33, -19], [-15.5, -0.5], [4, 18]].forEach(([z1, z2]) => {
       ctx.strokeRect(zToX(z2), yToY(-2), zToX(z1) - zToX(z2), yToY(-3.85) - yToY(-2));
     });
+    ctx.strokeRect(zToX(-46.6), yToY(5.7), zToX(-51.6) - zToX(-46.6), yToY(-2) - yToY(5.7)); // Fore Peak Tank
+    ctx.strokeRect(zToX(47.2), yToY(1.0), zToX(42.2) - zToX(47.2), yToY(-2) - yToY(1.0));   // Aft Peak Tank
     ctx.strokeStyle = '#90caf9';
     ctx.strokeRect(zToX(-38), yToY(6), zToX(-45.6) - zToX(-38), yToY(3.2) - yToY(6)); // Bosun Store
     ctx.strokeRect(zToX(-38), yToY(3.2), zToX(-45.6) - zToX(-38), yToY(-2) - yToY(3.2)); // Bow Thruster
@@ -3632,9 +3721,11 @@
     ctx.fillText('HOLD 2', zToX(-5), yToY(1.8));
     ctx.fillText('HOLD 1', zToX(-23), yToY(1.8));
     ctx.fillStyle = '#4fc3f7';
+    ctx.fillText('APT', zToX(46.8), yToY(-0.8));
     ctx.fillText('WBT3', zToX(14), yToY(-3.3));
     ctx.fillText('WBT2', zToX(-5), yToY(-3.3));
     ctx.fillText('WBT1', zToX(-23), yToY(-3.3));
+    ctx.fillText('FPT', zToX(-47.0), yToY(1.6));
     ctx.fillStyle = '#9fd0f5';
     ctx.fillText('FORECASTLE', zToX(-40), yToY(7.2));
 
@@ -3672,10 +3763,10 @@
     [[-33, -19], [-15, -1], [4, 18]].forEach(([z1, z2]) => {
       ctx.strokeRect(zToX(z2), xToPlanY(-6.2), zToX(z1) - zToX(z2), xToPlanY(6.2) - xToPlanY(-6.2));
     });
-    // Wing Ballast Tanks (Port & Starboard)
+    // Wing Ballast Tanks (Port & Starboard — ALL 6!)
     ctx.strokeStyle = 'rgba(41, 182, 246, 0.75)';
     ctx.setLineDash([4, 3]);
-    [[-18.2, -1.2], [3.8, 20.2]].forEach(([z1, z2]) => {
+    [[-33.2, -19.2], [-18.2, -1.2], [3.8, 20.2]].forEach(([z1, z2]) => {
       ctx.strokeRect(zToX(z2), xToPlanY(-8.2), zToX(z1) - zToX(z2), xToPlanY(-6.2) - xToPlanY(-8.2));
       ctx.strokeRect(zToX(z2), xToPlanY(6.2), zToX(z1) - zToX(z2), xToPlanY(8.2) - xToPlanY(6.2));
     });
@@ -3718,9 +3809,11 @@
     const dt = Math.min(clock.getDelta(), 0.05);
     const elapsed = clock.elapsedTime;
 
-    // 1. Player Movement & Physics
+    // 1. Player Movement & Physics (Realistic Human Scale: 1.6 m/s Walk, 3.8 m/s Run; Crouched 1.05 / 2.0 m/s in Double-Bottom!)
     if (pointerLocked) {
-      const speed = (keys['ShiftLeft'] || keys['ShiftRight']) ? 7.6 : 4.2;
+      const isCrouched = player.pos.y < -2.6;
+      const isRunning = keys['ShiftLeft'] || keys['ShiftRight'];
+      const speed = isCrouched ? (isRunning ? 2.0 : 1.05) : (isRunning ? 3.8 : 1.6);
       const forwardX = -Math.sin(player.yaw);
       const forwardZ = -Math.cos(player.yaw);
       const rightX = Math.cos(player.yaw);
@@ -3787,15 +3880,15 @@
     let targetInterior = 0.0;
     let isPitchBlackSpace = false;
     const px = player.pos.x, py = player.pos.y, pz = player.pos.z;
-    if (py < -2.6) {
-      isPitchBlackSpace = true; // All Double-Bottom Water Ballast Tanks (WBT NO.1 / NO.2 / NO.3)
+    if (py < -2.6 || (pz < -46.5 && py < 5.7) || (pz > 42.1 && py < 0.95)) {
+      isPitchBlackSpace = true; // All Double-Bottom Ballast Tanks (WBT 1-3), Fore Peak Tank (FPT) & Aft Peak Tank (APT)
     } else if (py < 3.5 && Math.abs(px) < 8.6) {
       if (pz > -33.2 && pz < -18.8 && Math.abs(px) < 6.0) {
         targetInterior = 0.22; // Open-top Cargo Hold #1 receives natural sky daylight
       } else if (((pz > -15.2 && pz < -0.8) || (pz > 3.8 && pz < 18.2)) && Math.abs(px) < 6.0) {
         isPitchBlackSpace = true; // Closed Cargo Holds #2 & #3 (zero light, explore with [F] Flashlight!)
-      } else if (Math.abs(px) > 5.95 && Math.abs(px) < 8.25 && pz > -18.5 && pz < 20.5 && (px > 5.95 || py > 0.85)) {
-        isPitchBlackSpace = true; // All 4 Wing Ballast Tanks (Stbd full-depth & Port upper wing!)
+      } else if (Math.abs(px) > 5.95 && Math.abs(px) < 8.25 && pz > -33.5 && pz < 20.5 && (px > 5.95 || py > 0.85)) {
+        isPitchBlackSpace = true; // All 6 Wing Ballast Tanks (Stbd full-depth & Port upper wing!)
       } else {
         targetInterior = 0.92; // Engine room, Steering gear, 62m Pipe tunnel, Bow thruster, Bosun's store
       }
