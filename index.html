@@ -229,38 +229,53 @@
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 0.92;
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x88b8e6);
   scene.fog = new THREE.FogExp2(0x9bc4e8, 0.0028);
 
-  const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 1400);
+  const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 1400);
 
-  // Sun & Ambient
-  const hemiLight = new THREE.HemisphereLight(0xbbe0ff, 0x2a4058, 0.72);
+  // Sun & Ambient (High-Res Player-Following Shadow Frustum + Dynamic Indoor Isolation)
+  const hemiLight = new THREE.HemisphereLight(0xbbe0ff, 0x2a4058, 0.42);
   scene.add(hemiLight);
 
-  const sunLight = new THREE.DirectionalLight(0xfff5e4, 1.35);
-  sunLight.position.set(70, 95, -55);
+  const sunOffset = new THREE.Vector3(70, 95, -55);
+  let baseSunIntensity = 1.25;
+  let baseHemiIntensity = 0.42;
+  let curInteriorFactor = 0.0;
+
+  const sunLight = new THREE.DirectionalLight(0xfff5e4, 1.25);
+  sunLight.position.copy(sunOffset);
   sunLight.castShadow = true;
   sunLight.shadow.mapSize.width = 2048;
   sunLight.shadow.mapSize.height = 2048;
   sunLight.shadow.camera.near = 10;
   sunLight.shadow.camera.far = 260;
-  sunLight.shadow.camera.left = -75;
-  sunLight.shadow.camera.right = 75;
-  sunLight.shadow.camera.top = 75;
-  sunLight.shadow.camera.bottom = -75;
-  sunLight.shadow.bias = -0.0005;
+  sunLight.shadow.camera.left = -36;
+  sunLight.shadow.camera.right = 36;
+  sunLight.shadow.camera.top = 36;
+  sunLight.shadow.camera.bottom = -36;
+  sunLight.shadow.bias = -0.0002;
+  sunLight.shadow.normalBias = 0.03;
   scene.add(sunLight);
+  scene.add(sunLight.target);
 
-  // Flashlight attached to camera
-  const flashlight = new THREE.SpotLight(0xfff6e0, 0, 32, Math.PI / 4.5, 0.45, 1.2);
-  flashlight.position.set(0, 0, 0);
-  flashlight.target.position.set(0, 0, -1);
+  // Flashlight attached to camera (with real-time shadows!)
+  const flashlight = new THREE.SpotLight(0xfff6e0, 0, 38, Math.PI / 4.2, 0.55, 1.25);
+  flashlight.position.set(0, -0.08, 0);
+  flashlight.target.position.set(0, -0.08, -1);
+  flashlight.castShadow = true;
+  flashlight.shadow.mapSize.width = 1024;
+  flashlight.shadow.mapSize.height = 1024;
+  flashlight.shadow.camera.near = 0.25;
+  flashlight.shadow.camera.far = 38;
+  flashlight.shadow.bias = -0.0004;
+  flashlight.shadow.normalBias = 0.02;
   camera.add(flashlight);
   camera.add(flashlight.target);
   scene.add(camera);
@@ -279,6 +294,114 @@
     tex.encoding = THREE.sRGBEncoding;
     return tex;
   }
+
+  function makeDataTexture(w, h, drawFn, repeatX = 1, repeatY = 1) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    drawFn(ctx, w, h);
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(repeatX, repeatY);
+    tex.encoding = THREE.LinearEncoding;
+    return tex;
+  }
+
+  // Procedural Bump & Roughness Maps (Zero external assets)
+  const texContainerBump = makeDataTexture(512, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#555555';
+    ctx.fillRect(0, 0, w, h);
+    for (let x = 0; x < w; x += 12) {
+      ctx.fillStyle = '#d8d8d8';
+      ctx.fillRect(x + 3, 14, 5, h - 28);
+      ctx.fillStyle = '#202020';
+      ctx.fillRect(x, 14, 2, h - 28);
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, 14);
+    ctx.fillRect(0, h - 14, w, 14);
+  });
+
+  const texDeckBump = makeDataTexture(256, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 3600; i++) {
+      const v = 95 + Math.floor(Math.random() * 68);
+      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+    }
+    ctx.strokeStyle = '#383838';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, w - 2, h - 2);
+  }, 16, 48);
+
+  const texDeckRough = makeDataTexture(256, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#d2d2d2';
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 900; i++) {
+      const v = 160 + Math.floor(Math.random() * 85);
+      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.fillRect(Math.random() * w, Math.random() * h, 8, 8);
+    }
+  }, 16, 48);
+
+  const texGrateBump = makeDataTexture(128, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#282828';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#b8b8b8';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < w; i += 16) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, h); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(w, i); ctx.stroke();
+    }
+    ctx.fillStyle = '#ffffff';
+    for (let x = 4; x < w; x += 16)
+      for (let y = 4; y < h; y += 16)
+        ctx.fillRect(x, y, 5, 3);
+  }, 14, 18);
+
+  const texGrateRough = makeDataTexture(128, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#d0d0d0';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#484848';
+    for (let x = 4; x < w; x += 16)
+      for (let y = 4; y < h; y += 16)
+        ctx.fillRect(x, y, 5, 3);
+  }, 14, 18);
+
+  const texHullBump = makeDataTexture(256, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#888888';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#d8d8d8';
+    ctx.lineWidth = 2;
+    for (let y = 0; y < h; y += 64) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+    for (let x = 0; x < w; x += 128) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    }
+  }, 12, 3);
+
+  const texHullRough = makeDataTexture(256, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#a8a8a8';
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 420; i++) {
+      const v = 125 + Math.floor(Math.random() * 110);
+      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.fillRect(Math.random() * w, Math.random() * h, 14, 6);
+    }
+  }, 12, 3);
+
+  const texBathroomTileBump = makeDataTexture(128, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#e8e8e8';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#303030';
+    ctx.lineWidth = 3;
+    for (let i = 0; i <= w; i += 32) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, h); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(w, i); ctx.stroke();
+    }
+  }, 6, 6);
 
   // Corrugated container texture generator
   function makeContainerTexture(baseHex, labelText) {
@@ -350,6 +473,21 @@
     ctx.strokeStyle = 'rgba(255,255,255,0.05)';
     ctx.strokeRect(0, 0, w, h);
   }, 8, 8);
+
+  const texBathroomTile = makeCanvasTexture(128, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#d9e6ec';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#9bb3be';
+    ctx.lineWidth = 2;
+    for (let i = 0; i <= w; i += 32) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, h); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(w, i); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    for (let x = 4; x < w; x += 32)
+      for (let y = 4; y < h; y += 32)
+        ctx.fillRect(x, y, 10, 10);
+  }, 6, 6);
 
   const texHullPlate = makeCanvasTexture(256, 256, (ctx, w, h) => {
     ctx.fillStyle = '#18304d';
@@ -446,19 +584,34 @@
   }
 
   // Materials Library
-  const matHullDark = new THREE.MeshStandardMaterial({ map: texHullPlate, roughness: 0.65, metalness: 0.35 });
+  const matHullDark = new THREE.MeshStandardMaterial({
+    map: texHullPlate, bumpMap: texHullBump, bumpScale: 0.025, roughnessMap: texHullRough, roughness: 0.78, metalness: 0.38
+  });
   const matHullRed = new THREE.MeshStandardMaterial({ color: 0x8b2323, roughness: 0.7, metalness: 0.25 });
   const matWhiteSteel = new THREE.MeshStandardMaterial({ color: 0xecf2f7, roughness: 0.45, metalness: 0.15 });
   const matInteriorWall = new THREE.MeshStandardMaterial({ color: 0xe4e8ec, roughness: 0.6, metalness: 0.05 });
-  const matDeck = new THREE.MeshStandardMaterial({ map: texDeckGreen, roughness: 0.85, metalness: 0.1 });
+  const matDeck = new THREE.MeshStandardMaterial({
+    map: texDeckGreen, bumpMap: texDeckBump, bumpScale: 0.018, roughnessMap: texDeckRough, roughness: 0.92, metalness: 0.1
+  });
   const matDarkSteel = new THREE.MeshStandardMaterial({ color: 0x2d3741, roughness: 0.5, metalness: 0.6 });
   const matSafetyYellow = new THREE.MeshStandardMaterial({ color: 0xf4b400, roughness: 0.4, metalness: 0.2 });
   const matOrange = new THREE.MeshStandardMaterial({ color: 0xe65100, roughness: 0.35, metalness: 0.15 });
   const matGlass = new THREE.MeshPhysicalMaterial({
     color: 0x99d6ff, transparent: true, opacity: 0.32, roughness: 0.08, metalness: 0.1, side: THREE.DoubleSide
   });
-  const matGrate = new THREE.MeshStandardMaterial({ map: texSteelGrate, roughness: 0.55, metalness: 0.7 });
+  const matGrate = new THREE.MeshStandardMaterial({
+    map: texSteelGrate, bumpMap: texGrateBump, bumpScale: 0.032, roughnessMap: texGrateRough, roughness: 0.72, metalness: 0.72
+  });
   const matInteriorFloor = new THREE.MeshStandardMaterial({ map: texInteriorFloor, roughness: 0.75 });
+  const matBathroomTile = new THREE.MeshStandardMaterial({
+    map: texBathroomTile, bumpMap: texBathroomTileBump, bumpScale: 0.015, roughness: 0.32, metalness: 0.08
+  });
+  const matCeramic = new THREE.MeshStandardMaterial({ color: 0xf7fafc, roughness: 0.16, metalness: 0.05 });
+  const matChrome = new THREE.MeshStandardMaterial({ color: 0xdce6ee, roughness: 0.12, metalness: 0.92 });
+  const matMirror = new THREE.MeshStandardMaterial({ color: 0xcbe4f5, roughness: 0.04, metalness: 0.96 });
+  const matFrostedGlass = new THREE.MeshPhysicalMaterial({
+    color: 0xd8eef8, transparent: true, opacity: 0.42, roughness: 0.28, metalness: 0.05, side: THREE.DoubleSide
+  });
   const matBridgeFloor = new THREE.MeshStandardMaterial({ map: texBridgeFloor, roughness: 0.7 });
   const matWood = new THREE.MeshStandardMaterial({ color: 0x7c5333, roughness: 0.65 });
   const matEngineGreen = new THREE.MeshStandardMaterial({ color: 0x2a6b48, roughness: 0.45, metalness: 0.55 });
@@ -627,19 +780,47 @@
       const sz = zStart + dz * (i + 0.5);
       makeBox(width, 0.08, stepDepth, xCenter, sy, sz, stepMat, { castShadow: true, receiveShadow: true });
     }
-    // Side stringers & handrails
+    // Side stringers, handrails, stanchion posts & sloped handrail colliders
     const len = Math.hypot(zEnd - zStart, yEnd - yStart);
     const pitch = Math.atan2(yEnd - yStart, zEnd - zStart);
+    const railPostCount = Math.max(2, Math.floor(len / 1.4) + 1);
+    const railSegments = Math.max(8, Math.round(Math.abs(yEnd - yStart) * 4));
     [-width / 2, width / 2].forEach(ox => {
+      const rx = xCenter + ox;
       const stringer = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, len), stepMat);
-      stringer.position.set(xCenter + ox, (yStart + yEnd) / 2 - 0.06, (zStart + zEnd) / 2);
+      stringer.position.set(rx, (yStart + yEnd) / 2 - 0.06, (zStart + zEnd) / 2);
       stringer.rotation.x = -pitch;
       shipGroup.add(stringer);
 
       const handrail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, len), matSafetyYellow);
-      handrail.position.set(xCenter + ox, (yStart + yEnd) / 2 + 0.92, (zStart + zEnd) / 2);
+      handrail.position.set(rx, (yStart + yEnd) / 2 + 0.92, (zStart + zEnd) / 2);
       handrail.rotation.x = -pitch;
       shipGroup.add(handrail);
+
+      // Vertical stanchion posts connecting stringer to handrail
+      for (let i = 0; i < railPostCount; i++) {
+        const t = i / (railPostCount - 1);
+        const py = yStart + (yEnd - yStart) * t;
+        const pz = zStart + (zEnd - zStart) * t;
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.96, 0.04), matSafetyYellow);
+        post.position.set(rx, py + 0.44, pz);
+        shipGroup.add(post);
+      }
+
+      // Stepped AABB colliders following the staircase slope so handrails solidly block sideways movement
+      for (let i = 0; i < railSegments; i++) {
+        const t0 = i / railSegments;
+        const t1 = (i + 1) / railSegments;
+        const z0 = zStart + (zEnd - zStart) * t0;
+        const z1 = zStart + (zEnd - zStart) * t1;
+        const y0 = yStart + (yEnd - yStart) * t0;
+        const y1 = yStart + (yEnd - yStart) * t1;
+        addCollider(
+          rx - 0.05, rx + 0.05,
+          Math.min(y0, y1), Math.max(y0, y1) + 1.15,
+          Math.min(z0, z1), Math.max(z0, z1)
+        );
+      }
     });
 
     // Register smooth walkable ramp
@@ -673,6 +854,16 @@
     shipGroup.add(sign);
   }
 
+  // Soft radial light-halo sprite texture (lightweight pseudo-bloom for interior lamps)
+  const texLightGlow = makeCanvasTexture(64, 64, (ctx, w, h) => {
+    const g = ctx.createRadialGradient(w / 2, h / 2, 1, w / 2, h / 2, w / 2);
+    g.addColorStop(0, 'rgba(255,255,255,0.65)');
+    g.addColorStop(0.35, 'rgba(255,245,220,0.22)');
+    g.addColorStop(1, 'rgba(255,245,220,0.0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  });
+
   // Helper: Interior Ceiling Light
   function addInteriorLight(x, y, z, intensity = 0.85, distance = 16, color = 0xfff3dd) {
     const bulb = new THREE.Mesh(
@@ -681,11 +872,100 @@
     );
     bulb.position.set(x, y, z);
     shipGroup.add(bulb);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: texLightGlow, color, transparent: true, opacity: 0.42,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    }));
+    halo.position.set(x, y - 0.08, z);
+    halo.scale.set(1.6, 0.9, 1);
+    shipGroup.add(halo);
     const light = new THREE.PointLight(color, intensity, distance, 1.4);
     light.position.set(x, y - 0.25, z);
     shipGroup.add(light);
     interiorLights.push(light);
     return light;
+  }
+
+  // Helper: 1:1 Marine Sanitary Fixtures (Toilet, Washbasin+Mirror, Shower Unit)
+  function makeToilet(x, y, z, rotY = 0) {
+    const g = new THREE.Group();
+    g.position.set(x, y, z);
+    g.rotation.y = rotY;
+    // Ceramic pedestal & bowl (real scale: W 0.40m x D 0.66m x Seat H 0.42m)
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 0.30, 14), matCeramic);
+    base.position.set(0, 0.15, 0.06);
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.15, 0.18, 16), matCeramic);
+    bowl.position.set(0, 0.34, 0.08);
+    const water = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.02, 12), new THREE.MeshStandardMaterial({ color: 0x5ca4c8, roughness: 0.1 }));
+    water.position.set(0, 0.41, 0.09);
+    const seat = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.032, 8, 18), matCeramic);
+    seat.rotation.x = Math.PI / 2;
+    seat.position.set(0, 0.44, 0.09);
+    // Cistern tank + chrome flush button
+    const tank = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.44, 0.20), matCeramic);
+    tank.position.set(0, 0.62, -0.20);
+    const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.02, 10), matChrome);
+    btn.position.set(0, 0.85, -0.20);
+    // Toilet paper roll on side
+    const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.11, 12), matWhiteSteel);
+    roll.rotation.z = Math.PI / 2;
+    roll.position.set(0.28, 0.62, 0.02);
+    g.add(base, bowl, water, seat, tank, btn, roll);
+    shipGroup.add(g);
+    addCollider(x - 0.24, x + 0.24, y, y + 0.85, z - 0.30, z + 0.30);
+  }
+
+  function makeWashbasin(x, y, z, rotY = 0, width = 0.85) {
+    const g = new THREE.Group();
+    g.position.set(x, y, z);
+    g.rotation.y = rotY;
+    // Vanity cabinet + countertop (real scale: H 0.85m, D 0.48m)
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(width, 0.78, 0.44), matWhiteSteel);
+    cab.position.set(0, 0.39, 0);
+    const top = new THREE.Mesh(new THREE.BoxGeometry(width + 0.04, 0.06, 0.48), matCeramic);
+    top.position.set(0, 0.81, 0.01);
+    const basin = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.16, 0.06, 16), new THREE.MeshStandardMaterial({ color: 0xb8ccd6, roughness: 0.25 }));
+    basin.position.set(0, 0.825, 0.03);
+    const drain = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 10), matChrome);
+    drain.position.set(0, 0.85, 0.03);
+    // Chrome gooseneck faucet
+    const faucetStem = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.22, 10), matChrome);
+    faucetStem.position.set(0, 0.95, -0.15);
+    const faucetSpout = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.032, 0.14), matChrome);
+    faucetSpout.position.set(0, 1.05, -0.09);
+    // Wall mirror + vanity LED bar
+    const mirrorFrame = new THREE.Mesh(new THREE.BoxGeometry(width * 0.92, 0.78, 0.04), matDarkSteel);
+    mirrorFrame.position.set(0, 1.52, -0.22);
+    const mirrorGlass = new THREE.Mesh(new THREE.PlaneGeometry(width * 0.86, 0.72), matMirror);
+    mirrorGlass.position.set(0, 1.52, -0.195);
+    const mirrorLight = new THREE.Mesh(new THREE.BoxGeometry(width * 0.65, 0.045, 0.07), new THREE.MeshBasicMaterial({ color: 0xfff8e8 }));
+    mirrorLight.position.set(0, 1.96, -0.19);
+    g.add(cab, top, basin, drain, faucetStem, faucetSpout, mirrorFrame, mirrorGlass, mirrorLight);
+    shipGroup.add(g);
+    const rot90 = Math.abs(Math.sin(rotY)) > 0.7;
+    const hw = rot90 ? 0.26 : width / 2 + 0.02;
+    const hd = rot90 ? width / 2 + 0.02 : 0.26;
+    addCollider(x - hw, x + hw, y, y + 0.9, z - hd, z + hd);
+  }
+
+  function makeShowerFixture(x, y, z, rotY = 0) {
+    const g = new THREE.Group();
+    g.position.set(x, y, z);
+    g.rotation.y = rotY;
+    // Chrome vertical slide bar, mixer valve & overhead showerhead
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 1.05, 10), matChrome);
+    bar.position.set(0, 1.52, 0.06);
+    const mixer = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.08, 0.09), matChrome);
+    mixer.position.set(0, 1.05, 0.06);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.34), matChrome);
+    arm.position.set(0, 2.08, 0.17);
+    const head = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.12, 0.035, 16), matChrome);
+    head.position.set(0, 2.04, 0.32);
+    // Floor drain grating
+    const drain = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.012, 0.18), matChrome);
+    drain.position.set(0, 0.012, 0.48);
+    g.add(bar, mixer, arm, head, drain);
+    shipGroup.add(g);
   }
 
   // =========================================================================
@@ -885,7 +1165,13 @@
       { color: '#455a64', name: 'MSC' }
     ];
     const containerMats = containerPalette.map(p =>
-      new THREE.MeshStandardMaterial({ map: makeContainerTexture(p.color, p.name), roughness: 0.55, metalness: 0.35 })
+      new THREE.MeshStandardMaterial({
+        map: makeContainerTexture(p.color, p.name),
+        bumpMap: texContainerBump,
+        bumpScale: 0.045,
+        roughness: 0.52,
+        metalness: 0.38
+      })
     );
 
     // --- BAY 1 (Forward, z = -33 to -19): OPEN CARGO HOLD with Cell Guides! ---
@@ -1033,18 +1319,21 @@
     exh.rotation.x = Math.PI / 2;
     exh.position.set(1.65, 1.75, 29.5);
     shipGroup.add(exh);
-    // Rotating Flywheel & Propeller Shaft running Aft
+    // Rotating Flywheel & Propeller Shaft running Aft (coaxial at x = 0, y = -0.9)
+    const shaftAxisY = -0.9;
     mainEngineFlywheel = new THREE.Group();
-    mainEngineFlywheel.position.set(0, -0.9, 33.6);
+    mainEngineFlywheel.position.set(0, shaftAxisY, 33.6);
     const wheel = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.3, 20), matSafetyYellow);
     wheel.rotation.x = Math.PI / 2;
     const spoke = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.18, 0.34), matDarkSteel);
-    mainEngineFlywheel.add(wheel, spoke);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.42, 16), matDarkSteel);
+    hub.rotation.x = Math.PI / 2;
+    mainEngineFlywheel.add(wheel, spoke, hub);
     shipGroup.add(mainEngineFlywheel);
 
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 8.5, 14), matDarkSteel);
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 8.8, 14), matDarkSteel);
     shaft.rotation.x = Math.PI / 2;
-    shaft.position.set(0, -1.1, 37.8);
+    shaft.position.set(0, shaftAxisY, 37.65);
     shipGroup.add(shaft);
 
     // Auxiliary Diesel Generators (Port side x = -5.5, z = 26..33)
@@ -1148,26 +1437,28 @@
 
   // --- 4D-4. BOW COMPARTMENTS (船首水手長儲藏室 Bosun's Store y=3.2 + 船首側推器室 Bow Thruster Room y=-2.0) ---
   function buildBowCompartments() {
-    // --- A. BOSUN'S STORE (y = 3.2, z = -38.0..-45.6, x = -5.0..+5.0) ---
+    // --- A. BOSUN'S STORE (y = 3.2, z = -38.0..-46.4, x = -5.0..+5.0) ---
     const yB = 3.2;
     // Entry threshold ramp from Main Deck (y=4.0, z=-38.0) down to Bosun's Store (y=3.2, z=-39.4)
     makeStaircaseZ(0.0, 1.5, -38.0, 4.0, -39.4, 3.2);
     // Floor with cutout for stair DOWN to Bow Thruster Room at x = +2.6..+4.4, z = -40.0..-45.2
-    makeBox(7.6, 0.25, 7.6, -1.2, yB - 0.12, -41.8, matGrate, { walkable: true }); // x = -5.0..+2.6
+    makeBox(7.6, 0.25, 8.4, -1.2, yB - 0.12, -42.2, matGrate, { walkable: true }); // x = -5.0..+2.6
     makeBox(2.4, 0.25, 2.0, 3.8, yB - 0.12, -39.0, matGrate, { walkable: true });  // z = -38..-40
-    makeBox(0.6, 0.25, 5.6, 4.7, yB - 0.12, -42.8, matGrate, { walkable: true });  // x = +4.4..+5.0
+    makeBox(2.4, 0.25, 1.2, 3.8, yB - 0.12, -45.8, matGrate, { walkable: true });  // z = -45.2..-46.4
+    makeBox(0.6, 0.25, 6.4, 4.7, yB - 0.12, -43.2, matGrate, { walkable: true });  // x = +4.4..+5.0
     // Guardrail around Bow Thruster stair opening
     makeRailing(2.6, -40.0, 2.6, -45.2, yB, 1.0, matSafetyYellow);
     makeRailing(2.6, -45.2, 4.4, -45.2, yB, 1.0, matSafetyYellow);
+    makeRailing(4.4, -40.0, 4.4, -45.2, yB, 1.0, matSafetyYellow);
 
-    // Enclosing Bulkheads (staying cleanly inside tapered bow hull!)
+    // Enclosing Bulkheads (staying cleanly inside tapered bow hull: halfBeam@-46.4 = 5.71m > 5.0m!)
     // Port wall has doorway at z = -38.75, y = -2.0 connecting to the 62m Under-Deck Pipe Tunnel!
-    makeWallX(-45.6, -38.0, -2.0, 3.0, -5.0, 0.25, matDarkSteel, -38.75, 1.4, 2.2);
+    makeWallX(-46.4, -38.0, -2.0, 3.0, -5.0, 0.25, matDarkSteel, -38.75, 1.4, 2.2);
     makeDoor(-5.0, -2.0, -38.75, 'x', 1.3, 2.15, '甲板下管路通道水密門 (Pipe Tunnel)', 0x8b2323);
     makeSign('PIPE TUNNEL 管路通道 → 機艙', -4.82, 0.42, -38.75, Math.PI / 2, '#5a1e1e', '#ffd54f');
-    makeBox(0.25, 5.0, 7.6, -5.0, 3.5, -41.8, matDarkSteel, { solid: true });
-    makeBox(0.25, 8.2, 7.6, 5.0, 1.8, -41.8, matDarkSteel, { solid: true });
-    makeBox(10.0, 8.2, 0.25, 0, 1.8, -45.6, matDarkSteel, { solid: true });
+    makeBox(0.25, 5.0, 8.4, -5.0, 3.5, -42.2, matDarkSteel, { solid: true });
+    makeBox(0.25, 8.2, 8.4, 5.0, 1.8, -42.2, matDarkSteel, { solid: true });
+    makeBox(10.0, 8.2, 0.25, 0, 1.8, -46.4, matDarkSteel, { solid: true });
     makeBox(10.0, 5.2, 0.25, 0, 0.6, -38.0, matDarkSteel, { solid: true }); // Below Bosun's Store aft wall (y=-2..3.2)
     // Seal upper aft corners of Bosun's Store (x = -5.0..-3.5 and +3.5..+5.0, y = 3.2..6.0) & sides below threshold
     makeBox(1.6, 2.8, 0.25, -4.25, 4.6, -38.0, matDarkSteel, { solid: true });
@@ -1196,9 +1487,9 @@
     // Staircase DOWN from Bosun's Store (y=3.2, z=-40.0) to Bow Thruster Room (y=-2.0, z=-45.2) at x = +3.5
     makeStaircaseZ(3.5, 1.6, -40.0, 3.2, -45.2, -2.0);
 
-    // --- B. BOW THRUSTER ROOM (船首側推器室: y = -2.0, z = -38.0..-45.6, x = -5.0..+5.0) ---
+    // --- B. BOW THRUSTER ROOM (船首側推器室: y = -2.0, z = -38.0..-46.4, x = -5.0..+5.0) ---
     const yT = -2.0;
-    makeBox(10.0, 0.25, 7.6, 0, yT - 0.12, -41.8, matGrate, { walkable: true });
+    makeBox(10.0, 0.25, 8.4, 0, yT - 0.12, -42.2, matGrate, { walkable: true });
     // Watertight Door opening into Port Pipe Tunnel at x = -5.0, z = -38.75, y = -2.0!
     // Remove solid block on port wall? Replace the port wall lower section with a doorway!
     // (Handled cleanly: let's add the doorway right in the port wall below!)
@@ -1219,8 +1510,8 @@
     // Steel Overpass Stair Bridge over Bow Thruster Tunnel (跨側推隧道鋼構過橋樓梯 at x = -2.4)
     makeStaircaseZ(-2.4, 1.35, -40.3, yT, -41.7, -0.15);
     makeBox(1.35, 0.12, 1.8, -2.4, -0.21, -42.5, matGrate, { walkable: true });
-    makeRailing(-3.08, -41.65, -3.08, -43.35, -0.15, 0.95, matSafetyYellow, false);
-    makeRailing(-1.72, -41.65, -1.72, -43.35, -0.15, 0.95, matSafetyYellow, false);
+    makeRailing(-3.08, -41.65, -3.08, -43.35, -0.15, 0.95, matSafetyYellow);
+    makeRailing(-1.72, -41.65, -1.72, -43.35, -0.15, 0.95, matSafetyYellow);
     makeStaircaseZ(-2.4, 1.35, -43.3, -0.15, -44.5, yT);
 
     // Electrical Starter Cabinet (shifted to port corner so forward bridge landing is wide open)
@@ -1333,22 +1624,32 @@
     makeBox(0.85, 1.15, 0.22, -2.95, y + 0.65, 40.05, matDarkSteel, { solid: true }); // Treadmill console
     makeBox(0.55, 0.45, 1.4, -2.95, y + 0.22, 36.8, matSeat, { solid: true }); // Weight bench
 
-    // --- 4. LAUNDRY & WASHROOM (洗衣間與衛浴: Aft-Stbd x = +4.6..+7.0, z = 35.0..40.8) ---
+    // --- 4. LAUNDRY & WASHROOM (洗衣間與公共衛浴: Aft-Stbd x = +4.6..+7.0, z = 35.0..40.8) ---
+    makeWallZ(4.6, 7.2, y, h, 35.0, 0.16, matInteriorWall);
     makeWallX(35.0, 40.8, y, h, 4.6, 0.16, matInteriorWall, 36.8, 1.4, 2.2);
-    // Washing Machine & Dryer (滾筒洗衣機 & 烘衣機)
-    [35.8, 36.75].forEach((wz, idx) => {
-      makeBox(0.75, 0.92, 0.78, 6.55, y + 0.46, wz, matWhiteSteel, { solid: true });
-      const drumDoor = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.05, 14), matDarkSteel);
+    makeDoor(4.6, y, 36.8, 'x', 1.3, 2.15, '洗衣間與衛浴門', 0xd8e2ea);
+    // Non-slip bathroom tile wet-zone floor (z = 37.3..40.8)
+    makeBox(2.3, 0.02, 3.5, 5.83, y + 0.01, 39.05, matBathroomTile, { castShadow: false });
+    // Washing Machine & Dryer (1:1 滾筒洗衣機 & 烘衣機: 0.65m x 0.88m x 0.65m)
+    [35.55, 36.32].forEach((wz) => {
+      makeBox(0.65, 0.88, 0.65, 6.62, y + 0.44, wz, matWhiteSteel, { solid: true });
+      const drumDoor = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.05, 16), matDarkSteel);
       drumDoor.rotation.z = Math.PI / 2;
-      drumDoor.position.set(6.16, y + 0.48, wz);
-      shipGroup.add(drumDoor);
+      drumDoor.position.set(6.28, y + 0.46, wz);
+      const drumGlass = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.06, 16), matGlass);
+      drumGlass.rotation.z = Math.PI / 2;
+      drumGlass.position.set(6.27, y + 0.46, wz);
+      shipGroup.add(drumDoor, drumGlass);
     });
-    // Washbasin & Mirror
-    makeBox(0.55, 0.85, 1.1, 6.65, y + 0.42, 38.4, matWhiteSteel, { solid: true });
-    makeBox(0.05, 0.85, 0.95, 7.0, y + 1.45, 38.4, new THREE.MeshStandardMaterial({ color: 0xb0d8f0, metalness: 0.9, roughness: 0.1 }));
-    // Toilet Stall (馬桶隔間)
-    makeBox(0.62, 0.42, 0.48, 6.45, y + 0.21, 40.1, matWhiteSteel, { solid: true });
-    makeBox(0.24, 0.85, 0.48, 6.82, y + 0.42, 40.1, matWhiteSteel);
+    // Vanity Washbasin & Mirror along starboard wall (facing -X)
+    makeWashbasin(6.72, y, 38.25, -Math.PI / 2, 1.1);
+    // Privacy Partition between WC Stall (left) & Shower Stall (right)
+    makeBox(0.08, 2.15, 1.25, 5.75, y + 1.075, 40.15, matFrostedGlass, { solid: true });
+    // WC Stall (left-aft: x = 4.7..5.7, z = 39.5..40.75)
+    makeToilet(5.2, y, 40.32, Math.PI);
+    // Shower Stall (right-aft: x = 5.8..6.95, z = 39.55..40.75, full open entry from -Z)
+    makeBox(1.18, 0.05, 0.06, 6.38, y + 0.025, 39.55, matCeramic); // Shower water curb
+    makeShowerFixture(6.95, y, 40.15, -Math.PI / 2);
 
     // Interior Lights
     addInteriorLight(-4.2, y + 2.85, 28.0, 0.9, 14);
@@ -1400,6 +1701,19 @@
     makeBox(0.55, 0.38, 0.05, -1.6, y + 0.98, 25.95, matDarkSteel); // Monitor
     makeBox(2.2, 0.65, 0.9, -4.6, y + 0.32, 30.2, new THREE.MeshStandardMaterial({ color: 0x2c4a6e }), { solid: true }); // Sofa
 
+    // Captain's Private En-suite Bathroom (船長室獨立衛浴: x = -2.2..-0.28, z = 29.6..32.42, 1.9m x 2.8m)
+    makeWallZ(-2.2, -0.28, y, h, 29.6, 0.14, matInteriorWall);
+    makeWallX(29.6, 32.42, y, h, -2.2, 0.14, matInteriorWall, 31.1, 1.15, 2.15);
+    makeDoor(-2.2, y, 31.1, 'x', 1.05, 2.1, '船長室獨立衛浴門', 0xd8e2ea);
+    makeSign('WC / SHOWER 衛浴', -2.30, y + 2.38, 31.1, -Math.PI / 2, '#133a5c', '#e0f2fe');
+    makeBox(1.85, 0.02, 2.74, -1.24, y + 0.01, 31.02, matBathroomTile, { castShadow: false });
+    makeBox(0.75, 2.1, 0.06, -0.70, y + 1.05, 30.62, matFrostedGlass, { solid: true }); // Shower splash screen
+    makeBox(1.82, 0.05, 0.06, -1.24, y + 0.025, 30.62, matCeramic); // Shower curb
+    makeShowerFixture(-0.34, y, 30.12, -Math.PI / 2);
+    makeWashbasin(-0.56, y, 31.32, -Math.PI / 2, 0.82);
+    makeToilet(-1.08, y, 32.02, Math.PI);
+    addInteriorLight(-1.24, y + 2.82, 31.0, 0.65, 6);
+
     // Ship's Office Furniture
     makeBox(2.4, 0.78, 1.2, 3.2, y + 0.39, 28.5, matWood, { solid: true }); // Conference table
     makeBox(1.8, 0.78, 0.8, 4.8, y + 0.39, 26.0, matWood, { solid: true }); // Office desk
@@ -1411,19 +1725,29 @@
     makeBox(1.1, 0.72, 2.1, -5.3, y + 0.36, 39.2, matWhiteSteel, { solid: true }); // Medical Bed
     makeBox(0.8, 0.1, 1.1, -5.3, y + 0.76, 39.4, matPipeRed); // Medical blanket
     makeBox(0.8, 1.4, 0.45, -4.0, y + 1.4, 40.5, matWhiteSteel, { solid: true }); // Medicine cabinet
+    makeWashbasin(-3.52, y, 37.2, -Math.PI / 2, 0.78); // Medical Washbasin (MLC 2006)
     makeSign('✚ HOSPITAL 醫務室', -4.65, y + 2.42, 34.88, Math.PI, '#7f1d1d', '#ffffff');
 
     // --- CREW CABIN (船員臥室: Aft-Stbd x = +2.3..+6.1, z = 35.0..40.7) ---
     makeWallZ(2.3, 6.1, y, h, 35.0, 0.16, matInteriorWall, 4.2, 1.3, 2.2);
     makeWallX(35.0, 40.8, y, h, 2.3, 0.16, matInteriorWall);
-    // Double Bunk Bed (上下舖)
-    makeBox(1.05, 0.55, 2.1, 5.4, y + 0.28, 39.2, matDarkSteel, { solid: true });
-    makeBox(0.95, 0.14, 2.0, 5.4, y + 0.62, 39.2, matWhiteSteel);
-    makeBox(1.05, 0.14, 2.1, 5.4, y + 1.65, 39.2, matDarkSteel);
-    makeBox(0.95, 0.14, 2.0, 5.4, y + 1.78, 39.2, matWhiteSteel);
-    // Crew Wardrobe Locker & Desk
-    makeBox(0.7, 2.0, 1.1, 2.85, y + 1.0, 39.8, matWhiteSteel, { solid: true });
-    makeBox(1.1, 0.76, 0.65, 3.6, y + 0.38, 40.2, matWood, { solid: true });
+    // Double Bunk Bed (上下舖, shifted slightly stbd for wide aisle beside wet unit)
+    makeBox(1.05, 0.55, 2.1, 5.48, y + 0.28, 39.2, matDarkSteel, { solid: true });
+    makeBox(0.95, 0.14, 2.0, 5.48, y + 0.62, 39.2, matWhiteSteel);
+    makeBox(1.05, 0.14, 2.1, 5.48, y + 1.65, 39.2, matDarkSteel);
+    makeBox(0.95, 0.14, 2.0, 5.48, y + 1.78, 39.2, matWhiteSteel);
+    // Crew Wardrobe Locker & Study Desk along port wall (z = 35.4..38.0)
+    makeBox(0.68, 2.0, 1.05, 2.75, y + 1.0, 35.95, matWhiteSteel, { solid: true });
+    makeBox(0.65, 0.76, 1.15, 2.75, y + 0.38, 37.35, matWood, { solid: true });
+    // Crew Cabin Prefab Marine Wet Unit (船員獨立衛浴模組: x = 2.38..4.05, z = 38.5..40.75, 1.67m x 2.25m)
+    makeWallX(38.5, 40.75, y, h, 4.05, 0.14, matInteriorWall);
+    makeWallZ(2.38, 4.05, y, h, 38.5, 0.14, matInteriorWall, 3.35, 1.15, 2.15);
+    makeDoor(3.35, y, 38.5, 'z', 1.05, 2.1, '船員室衛浴門', 0xd8e2ea);
+    makeBox(1.62, 0.02, 2.18, 3.22, y + 0.01, 39.62, matBathroomTile, { castShadow: false });
+    makeToilet(2.82, y, 40.32, Math.PI);
+    makeWashbasin(3.76, y, 39.65, -Math.PI / 2, 0.72);
+    makeShowerFixture(2.44, y, 39.15, Math.PI / 2);
+    addInteriorLight(3.22, y + 2.82, 39.6, 0.55, 5);
     makeSign('CREW CABIN 船員臥室', 4.2, y + 2.42, 34.88, Math.PI);
 
     // Room Nameplates on Deck B Forward Cabins
@@ -1643,6 +1967,7 @@
     makeRailing(-6.7, 40.7, 6.7, 40.7, y, 1.1);
     makeRailing(4.4, 35.2, 4.4, 39.8, y, 1.0, matSafetyYellow);
     makeRailing(4.4, 39.8, 6.0, 39.8, y, 1.0, matSafetyYellow);
+    makeRailing(6.0, 35.2, 6.0, 39.8, y, 1.0, matSafetyYellow);
 
     // Magnetic Compass Binnacle
     const binnacle = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 1.25, 12), matWhiteSteel);
@@ -1711,24 +2036,98 @@
   buildCompassDeck();
 
   // =========================================================================
-  // 5. DYNAMIC OCEAN & SHIP WAKE
+  // 5. DYNAMIC OCEAN & SHIP WAKE (GPU Gerstner/Wave Normals + Fresnel + Sun Glitter)
   // =========================================================================
-  const oceanGeo = new THREE.PlaneGeometry(1600, 1600, 96, 96);
+  const oceanGeo = new THREE.PlaneGeometry(1600, 1600, 128, 128);
   oceanGeo.rotateX(-Math.PI / 2);
-  const oceanPos = oceanGeo.attributes.position;
-  const oceanBaseY = new Float32Array(oceanPos.count);
-  for (let i = 0; i < oceanPos.count; i++) oceanBaseY[i] = oceanPos.getY(i);
+
+  const oceanUniforms = {
+    uTime: { value: 0 },
+    uScroll: { value: 0 },
+    uSunDir: { value: new THREE.Vector3(70, 95, -55).normalize() },
+    uSunColor: { value: new THREE.Color(0xfff4d6) },
+    uSunStrength: { value: 1.0 },
+    uHorizonColor: { value: new THREE.Color(0x9bc4e8) },
+    uDeepColor: { value: new THREE.Color(0x042844) },
+    uCrestColor: { value: new THREE.Color(0x0f5d80) }
+  };
 
   const oceanMat = new THREE.MeshStandardMaterial({
-    color: 0x0b4870, roughness: 0.22, metalness: 0.35, flatShading: false
+    color: 0xffffff, roughness: 0.14, metalness: 0.12, flatShading: false
   });
-  // Clip ocean pixels inside the watertight hull footprint so below-waterline compartments stay 100% dry!
+  // GPU wave displacement, analytical swell normals, procedural micro-ripples, Fresnel, sun glitter & watertight hull clipping!
   oceanMat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, oceanUniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vOceanWorldPos;')
-      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvOceanWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform float uTime;
+        uniform float uScroll;
+        varying vec3 vOceanWorldPos;
+        varying float vWaveHeight;
+        varying vec3 vSwellNormal;
+        void evalOceanWave(vec2 p, float t, out float h, out vec2 grad) {
+          float p1 = p.x * 0.036 + p.y * 0.018 + t * 1.15;
+          float p2 = -p.x * 0.022 + p.y * 0.048 + t * 1.45;
+          float p3 = p.x * 0.075 - p.y * 0.062 + t * 1.95;
+          float p4 = p.x * 0.13 + p.y * 0.11 - t * 2.35;
+          h = sin(p1) * 0.38 + cos(p2) * 0.42 + sin(p3) * 0.16 + cos(p4) * 0.08;
+          float dx = cos(p1) * 0.38 * 0.036 + sin(p2) * 0.42 * 0.022 + cos(p3) * 0.16 * 0.075 - sin(p4) * 0.08 * 0.13;
+          float dz = cos(p1) * 0.38 * 0.018 - sin(p2) * 0.42 * 0.048 - cos(p3) * 0.16 * 0.062 - sin(p4) * 0.08 * 0.11;
+          grad = vec2(dx, dz);
+        }`
+      )
+      .replace(
+        '#include <beginnormal_vertex>',
+        `#include <beginnormal_vertex>
+        float oWaveH;
+        vec2 oWaveGrad;
+        evalOceanWave(vec2(position.x, position.z - uScroll), uTime, oWaveH, oWaveGrad);
+        objectNormal = normalize(vec3(-oWaveGrad.x, 1.0, -oWaveGrad.y));
+        vSwellNormal = objectNormal;`
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        transformed.y += oWaveH;
+        vWaveHeight = oWaveH;`
+      )
+      .replace(
+        '#include <worldpos_vertex>',
+        `#include <worldpos_vertex>
+        vOceanWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`
+      );
+
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vOceanWorldPos;')
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform float uTime;
+        uniform float uScroll;
+        uniform vec3 uSunDir;
+        uniform vec3 uSunColor;
+        uniform float uSunStrength;
+        uniform vec3 uHorizonColor;
+        uniform vec3 uDeepColor;
+        uniform vec3 uCrestColor;
+        varying vec3 vOceanWorldPos;
+        varying float vWaveHeight;
+        varying vec3 vSwellNormal;
+
+        vec2 oceanRippleGrad(vec2 p, float t) {
+          vec2 g = vec2(0.0);
+          float a1 = p.x * 0.42 + p.y * 0.31 + t * 2.1;
+          float a2 = -p.x * 0.58 + p.y * 0.47 + t * 2.7;
+          float a3 = p.x * 1.15 - p.y * 0.92 - t * 3.4;
+          float a4 = p.x * 2.10 + p.y * 1.85 + t * 4.2;
+          g += vec2(cos(a1) * 0.42, cos(a1) * 0.31) * 0.085;
+          g += vec2(-cos(a2) * 0.58, cos(a2) * 0.47) * 0.065;
+          g += vec2(cos(a3) * 1.15, -cos(a3) * 0.92) * 0.032;
+          g += vec2(cos(a4) * 2.10, cos(a4) * 1.85) * 0.015;
+          return g;
+        }`
+      )
       .replace(
         '#include <clipping_planes_fragment>',
         `#include <clipping_planes_fragment>
@@ -1740,6 +2139,48 @@
           }
           if (abs(vOceanWorldPos.x) < halfBeam) discard;
         }`
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        float crestT = smoothstep(-0.55, 0.65, vWaveHeight);
+        diffuseColor.rgb = mix(uDeepColor, uCrestColor, crestT);`
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        float camDist = length(cameraPosition - vOceanWorldPos);
+        float rippleFade = smoothstep(520.0, 25.0, camDist);
+        vec2 ripG = oceanRippleGrad(vec2(vOceanWorldPos.x, vOceanWorldPos.z - uScroll), uTime) * rippleFade;
+        vec3 worldOceanN = normalize(vec3(vSwellNormal.x - ripG.x, vSwellNormal.y, vSwellNormal.z - ripG.y));
+        normal = normalize((viewMatrix * vec4(worldOceanN, 0.0)).xyz);`
+      )
+      .replace(
+        '#include <fog_fragment>',
+        `vec3 viewDirW = normalize(cameraPosition - vOceanWorldPos);
+        float fresnel = pow(1.0 - max(dot(worldOceanN, viewDirW), 0.0), 4.0);
+        // Fresnel atmospheric sky reflection on shallow grazing angles
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, uHorizonColor * 0.92, fresnel * 0.58);
+        // Sun / moon specular glitter path across wave facets
+        vec3 sunDirW = normalize(uSunDir);
+        vec3 halfVec = normalize(sunDirW + viewDirW);
+        float ndh = max(dot(worldOceanN, halfVec), 0.0);
+        float specTight = pow(ndh, 240.0) * 3.4;
+        float specBroad = pow(ndh, 32.0) * 0.42;
+        float glitterScale = mix(0.22, 1.0, clamp(uSunStrength, 0.0, 1.0));
+        gl_FragColor.rgb += uSunColor * (specTight + specBroad) * glitterScale;
+        // Subtle hull waterline foam collar
+        float hullDistZ = max(max(-54.2 - vOceanWorldPos.z, vOceanWorldPos.z - 47.6), 0.0);
+        float hullBeamAtZ = 8.65;
+        if (vOceanWorldPos.z < -38.0 && vOceanWorldPos.z > -54.2) {
+          float bt = clamp((-38.0 - vOceanWorldPos.z) / 16.2, 0.0, 1.0);
+          hullBeamAtZ = 8.65 * (1.0 - pow(bt, 1.65));
+        }
+        float hullEdgeDist = length(vec2(max(abs(vOceanWorldPos.x) - hullBeamAtZ, 0.0), hullDistZ));
+        float foamNoise = sin(vOceanWorldPos.z * 0.9 - uScroll * 1.4 + uTime * 3.0) * 0.5 + 0.5;
+        float hullFoam = smoothstep(2.6, 0.15, hullEdgeDist) * (0.45 + 0.55 * foamNoise) * 0.45;
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.88, 0.95, 1.0), hullFoam * (0.35 + 0.65 * glitterScale));
+        #include <fog_fragment>`
       );
   };
   const oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
@@ -1763,13 +2204,131 @@
   wakeMesh.position.set(0, 0.12, 95);
   scene.add(wakeMesh);
 
-  // Distant Sky / Sun visual disc
-  const sunDisc = new THREE.Mesh(
-    new THREE.SphereGeometry(18, 16, 16),
-    new THREE.MeshBasicMaterial({ color: 0xfff6d6 })
-  );
-  sunDisc.position.set(280, 360, -240);
-  scene.add(sunDisc);
+  // Procedural Atmospheric Sky Dome + PMREM Environment Map (IBL)
+  const skyUniforms = {
+    uTopColor: { value: new THREE.Color(0x1f62b5) },
+    uHorizonColor: { value: new THREE.Color(0x9bc4e8) },
+    uBottomColor: { value: new THREE.Color(0x0b2c47) },
+    uSunDir: { value: new THREE.Vector3(70, 95, -55).normalize() },
+    uSunColor: { value: new THREE.Color(0xfff4d6) },
+    uSunStrength: { value: 1.0 },
+    uStarStrength: { value: 0.0 },
+    uCloudTint: { value: new THREE.Color(0xffffff) },
+    uCloudOpacity: { value: 0.28 }
+  };
+
+  const skyMat = new THREE.ShaderMaterial({
+    uniforms: skyUniforms,
+    side: THREE.BackSide,
+    depthWrite: false,
+    fog: false,
+    vertexShader: `
+      varying vec3 vDir;
+      void main() {
+        vDir = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uTopColor;
+      uniform vec3 uHorizonColor;
+      uniform vec3 uBottomColor;
+      uniform vec3 uSunDir;
+      uniform vec3 uSunColor;
+      uniform float uSunStrength;
+      uniform float uStarStrength;
+      uniform vec3 uCloudTint;
+      uniform float uCloudOpacity;
+      varying vec3 vDir;
+
+      float hash21(vec2 p) {
+        p = fract(p * vec2(123.34, 456.21));
+        p += dot(p, p + 45.32);
+        return fract(p.x * p.y);
+      }
+
+      float noise2(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = hash21(i);
+        float b = hash21(i + vec2(1.0, 0.0));
+        float c = hash21(i + vec2(0.0, 1.0));
+        float d = hash21(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+      }
+
+      float fbm(vec2 p) {
+        float v = 0.0;
+        float a = 0.5;
+        for (int i = 0; i < 4; i++) {
+          v += a * noise2(p);
+          p = p * 2.03 + vec2(17.1, 31.7);
+          a *= 0.5;
+        }
+        return v;
+      }
+
+      void main() {
+        vec3 d = normalize(vDir);
+        float h = d.y;
+
+        // Atmospheric sky gradient (zenith -> horizon -> ocean bounce below)
+        vec3 col;
+        if (h >= 0.0) {
+          float t = pow(clamp(h, 0.0, 1.0), 0.52);
+          col = mix(uHorizonColor, uTopColor, t);
+        } else {
+          float t = pow(clamp(-h, 0.0, 1.0), 0.45);
+          col = mix(uHorizonColor * 0.72, uBottomColor, t);
+        }
+
+        // Subtle high-altitude procedural clouds
+        if (h > 0.02 && uCloudOpacity > 0.01) {
+          vec2 uv = d.xz / (h + 0.18) * 1.4;
+          float c = fbm(uv + vec2(0.4, -0.2));
+          float cloudMask = smoothstep(0.48, 0.78, c) * smoothstep(0.02, 0.22, h) * uCloudOpacity;
+          col = mix(col, uCloudTint, cloudMask);
+        }
+
+        // Physical sun disc + Mie atmospheric halo
+        float sunDot = max(dot(d, normalize(uSunDir)), 0.0);
+        if (uSunStrength > 0.01) {
+          float halo = pow(sunDot, 7.0) * 0.35 + pow(sunDot, 48.0) * 0.55;
+          float disc = smoothstep(0.9986, 0.9994, sunDot) * 2.4;
+          col += uSunColor * (halo + disc) * uSunStrength;
+        }
+
+        // Crisp night sky stars + subtle moonlight glow
+        if (uStarStrength > 0.01 && h > 0.03) {
+          vec2 starGrid = floor(d.xz / (h + 0.25) * 140.0);
+          float s = hash21(starGrid);
+          float star = smoothstep(0.994, 0.9995, s) * smoothstep(0.03, 0.25, h);
+          col += vec3(0.85, 0.92, 1.0) * star * 1.4 * uStarStrength;
+          float moonHalo = pow(sunDot, 16.0) * 0.16;
+          float moonDisc = smoothstep(0.9988, 0.9995, sunDot) * 1.1;
+          col += vec3(0.75, 0.86, 1.0) * (moonHalo + moonDisc) * uStarStrength;
+        }
+
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `
+  });
+
+  const skyDome = new THREE.Mesh(new THREE.SphereGeometry(950, 32, 20), skyMat);
+  scene.add(skyDome);
+
+  // Dedicated lightweight PMREM baking scene for physically-based IBL reflections
+  const pmremGenerator = new THREE.PMREMGenerator(renderer);
+  pmremGenerator.compileCubemapShader();
+  const pmremScene = new THREE.Scene();
+  pmremScene.add(new THREE.Mesh(new THREE.SphereGeometry(40, 24, 16), skyMat));
+  let envRT = null;
+  function updateEnvironmentMap() {
+    if (envRT) envRT.dispose();
+    envRT = pmremGenerator.fromScene(pmremScene, 0.03);
+    scene.environment = envRT.texture;
+  }
 
   // =========================================================================
   // 6. SHIP STATE, AUDIO & TIME OF DAY
@@ -1789,56 +2348,87 @@
 
   // Time of Day: 0 = Day, 1 = Sunset, 2 = Night
   let todIndex = 0;
-  function applyTimeOfDay(idx) {
+  function applyTimeOfDay(idx, silent = false) {
     todIndex = idx % 3;
     if (todIndex === 0) {
       scene.background.setHex(0x88b8e6);
       scene.fog.color.setHex(0x9bc4e8);
-      sunLight.color.setHex(0xfff5e4);
-      sunLight.intensity = 1.35;
-      sunLight.position.set(70, 95, -55);
+      sunLight.color.setHex(0xfff4df);
+      baseSunIntensity = 1.25;
+      sunOffset.set(70, 95, -55);
+      sunLight.position.copy(sunOffset);
       hemiLight.color.setHex(0xbbe0ff);
-      hemiLight.groundColor.setHex(0x2a4058);
-      hemiLight.intensity = 0.72;
-      oceanMat.color.setHex(0x0b4870);
-      sunDisc.visible = true;
-      sunDisc.position.set(280, 360, -240);
-      sunDisc.material.color.setHex(0xfff6d6);
+      hemiLight.groundColor.setHex(0x22384e);
+      baseHemiIntensity = 0.42;
+      oceanUniforms.uDeepColor.value.setHex(0x042844);
+      oceanUniforms.uCrestColor.value.setHex(0x0f5d80);
+      skyUniforms.uTopColor.value.setHex(0x1f62b5);
+      skyUniforms.uHorizonColor.value.setHex(0x9bc4e8);
+      skyUniforms.uBottomColor.value.setHex(0x0b2c47);
+      skyUniforms.uSunDir.value.copy(sunLight.position).normalize();
+      skyUniforms.uSunColor.value.setHex(0xfff4d6);
+      skyUniforms.uSunStrength.value = 1.0;
+      skyUniforms.uStarStrength.value = 0.0;
+      skyUniforms.uCloudTint.value.setHex(0xf4f8ff);
+      skyUniforms.uCloudOpacity.value = 0.28;
       exteriorFloodLights.forEach(l => l.intensity = 0.0);
       bridgeLights.forEach(l => l.color.setHex(0xfff0d6));
-      showToast('環境時間：晴朗白天 (Daylight)');
+      if (!silent) showToast('環境時間：晴朗白天 (Daylight)');
     } else if (todIndex === 1) {
       scene.background.setHex(0xd97b59);
-      scene.fog.color.setHex(0xc86e55);
-      sunLight.color.setHex(0xff9b54);
-      sunLight.intensity = 1.15;
-      sunLight.position.set(-110, 26, -80);
+      scene.fog.color.setHex(0xc87458);
+      sunLight.color.setHex(0xff964f);
+      baseSunIntensity = 1.15;
+      sunOffset.set(-110, 24, -80);
+      sunLight.position.copy(sunOffset);
       hemiLight.color.setHex(0xffb88c);
-      hemiLight.groundColor.setHex(0x22263c);
-      hemiLight.intensity = 0.55;
-      oceanMat.color.setHex(0x163856);
-      sunDisc.visible = true;
-      sunDisc.position.set(-340, 75, -240);
-      sunDisc.material.color.setHex(0xff8844);
+      hemiLight.groundColor.setHex(0x1d2236);
+      baseHemiIntensity = 0.34;
+      oceanUniforms.uDeepColor.value.setHex(0x0a1e33);
+      oceanUniforms.uCrestColor.value.setHex(0x1c4560);
+      skyUniforms.uTopColor.value.setHex(0x283766);
+      skyUniforms.uHorizonColor.value.setHex(0xdf7b54);
+      skyUniforms.uBottomColor.value.setHex(0x131d2e);
+      skyUniforms.uSunDir.value.copy(sunLight.position).normalize();
+      skyUniforms.uSunColor.value.setHex(0xff8c42);
+      skyUniforms.uSunStrength.value = 1.15;
+      skyUniforms.uStarStrength.value = 0.0;
+      skyUniforms.uCloudTint.value.setHex(0xffb98a);
+      skyUniforms.uCloudOpacity.value = 0.34;
       exteriorFloodLights.forEach(l => l.intensity = 1.1);
       bridgeLights.forEach(l => l.color.setHex(0xffe0b2));
-      showToast('環境時間：海上黃昏 (Sunset)');
+      if (!silent) showToast('環境時間：海上黃昏 (Sunset)');
     } else {
       scene.background.setHex(0x050c18);
       scene.fog.color.setHex(0x061020);
       sunLight.color.setHex(0x6c8eb8);
-      sunLight.intensity = 0.25;
-      sunLight.position.set(50, 90, 40);
+      baseSunIntensity = 0.24;
+      sunOffset.set(50, 90, 40);
+      sunLight.position.copy(sunOffset);
       hemiLight.color.setHex(0x1b2d4a);
-      hemiLight.groundColor.setHex(0x080d14);
-      hemiLight.intensity = 0.32;
-      oceanMat.color.setHex(0x041526);
-      sunDisc.visible = false;
+      hemiLight.groundColor.setHex(0x060b12);
+      baseHemiIntensity = 0.22;
+      oceanUniforms.uDeepColor.value.setHex(0x020b16);
+      oceanUniforms.uCrestColor.value.setHex(0x071d33);
+      skyUniforms.uTopColor.value.setHex(0x030812);
+      skyUniforms.uHorizonColor.value.setHex(0x0b192e);
+      skyUniforms.uBottomColor.value.setHex(0x02070f);
+      skyUniforms.uSunDir.value.copy(sunLight.position).normalize();
+      skyUniforms.uSunColor.value.setHex(0x9ab8e0);
+      skyUniforms.uSunStrength.value = 0.0;
+      skyUniforms.uStarStrength.value = 1.0;
+      skyUniforms.uCloudTint.value.setHex(0x16253b);
+      skyUniforms.uCloudOpacity.value = 0.14;
       exteriorFloodLights.forEach(l => l.intensity = 2.0);
       // Authentic red night-vision lighting on the Navigation Bridge!
       bridgeLights.forEach(l => l.color.setHex(0xff3322));
-      showToast('環境時間：夜間航行（駕駛台紅光夜視模式）');
+      if (!silent) showToast('環境時間：夜間航行（駕駛台紅光夜視模式）');
     }
+    oceanUniforms.uSunDir.value.copy(skyUniforms.uSunDir.value);
+    oceanUniforms.uSunColor.value.copy(skyUniforms.uSunColor.value);
+    oceanUniforms.uSunStrength.value = skyUniforms.uSunStrength.value;
+    oceanUniforms.uHorizonColor.value.copy(skyUniforms.uHorizonColor.value);
+    updateEnvironmentMap();
   }
 
   // Procedural Web Audio API Sound Engine
@@ -2000,9 +2590,14 @@
 
     if (e.code === 'KeyF') {
       player.flashlightOn = !player.flashlightOn;
-      flashlight.intensity = player.flashlightOn ? 2.4 : 0;
+      flashlight.intensity = player.flashlightOn ? 2.8 : 0;
       playClickSound(player.flashlightOn ? 440 : 300);
       showToast(player.flashlightOn ? '手電筒：開啟' : '手電筒：關閉');
+    } else if (e.code === 'KeyV') {
+      camera.fov = camera.fov < 65 ? 72 : 58;
+      camera.updateProjectionMatrix();
+      playClickSound(360);
+      showToast(camera.fov === 58 ? '視角：寫實人眼 (FOV 58°)' : '視角：廣角探索 (FOV 72°)');
     } else if (e.code === 'KeyT') {
       applyTimeOfDay(todIndex + 1);
     } else if (e.code === 'KeyH') {
@@ -2358,6 +2953,33 @@
     camera.rotation.order = 'YXZ';
     camera.rotation.y = player.yaw;
     camera.rotation.x = player.pitch;
+    skyDome.position.copy(camera.position);
+
+    // High-Resolution Player-Following Sun Shadow Frustum (1m grid-snapped to prevent shimmer)
+    const snapX = Math.round(player.pos.x);
+    const snapY = Math.round(player.pos.y);
+    const snapZ = Math.round(player.pos.z);
+    sunLight.target.position.set(snapX, snapY, snapZ);
+    sunLight.position.set(snapX + sunOffset.x, snapY + sunOffset.y, snapZ + sunOffset.z);
+
+    // Indoor / Below-Waterline Daylight Isolation & Subtle Eye Adaptation
+    let targetInterior = 0.0;
+    const px = player.pos.x, py = player.pos.y, pz = player.pos.z;
+    if (py < 3.5) {
+      targetInterior = 0.92; // Engine room, Steering gear, 62m Pipe tunnel, Bow thruster, Bosun's store
+    } else if (py < 6.8) {
+      if (pz > 24.0 && pz < 41.0 && Math.abs(px) < 7.2) targetInterior = 0.62; // Deck A accommodation
+    } else if (py < 9.8) {
+      if (pz > 25.0 && pz < 40.9 && Math.abs(px) < 6.2) targetInterior = 0.58; // Deck B cabins
+    } else if (py < 12.2) {
+      if (pz >= 34.8 && pz < 40.6 && px < -3.7 && px > -6.7) targetInterior = 0.78; // SOLAS safety rooms
+      else if (pz > 25.0 && pz < 34.8 && Math.abs(px) < 6.8) targetInterior = 0.22; // Wheelhouse panoramic windows
+    }
+    curInteriorFactor += (targetInterior - curInteriorFactor) * Math.min(1, dt * 4.5);
+    hemiLight.intensity = baseHemiIntensity * (1.0 - curInteriorFactor * 0.82);
+    const belowWaterDarken = py < 3.5 ? 0.78 : 0.0;
+    sunLight.intensity = baseSunIntensity * (1.0 - curInteriorFactor * belowWaterDarken);
+    renderer.toneMappingExposure = 0.92 + curInteriorFactor * 0.14;
 
     // 2. Animate Doors
     for (let i = 0; i < animatedDoors.length; i++) {
@@ -2385,15 +3007,9 @@
       steeringTiller.rotation.y += (targetRudder - steeringTiller.rotation.y) * Math.min(1, dt * 3);
     }
 
-    // Dynamic Ocean Waves
-    for (let i = 0; i < oceanPos.count; i++) {
-      const ox = oceanPos.getX(i);
-      const oz = oceanPos.getZ(i) - oceanScroll;
-      const wave = Math.sin(ox * 0.035 + elapsed * 1.1) * 0.42
-                 + Math.cos(oz * 0.045 + elapsed * 1.45) * 0.48;
-      oceanPos.setY(i, wave);
-    }
-    oceanPos.needsUpdate = true;
+    // Dynamic Ocean Waves (100% GPU Shader driven!)
+    oceanUniforms.uTime.value = elapsed;
+    oceanUniforms.uScroll.value = oceanScroll;
     wakeMesh.material.opacity = Math.min(0.85, Math.abs(currentKnots) / 14);
 
     // Engine Sound Volume scales with proximity to Engine Room!
@@ -2445,10 +3061,7 @@
       locCoordsEl.textContent = `X: ${cx.toFixed(1)}m | Y: ${cy.toFixed(1)}m | Z: ${cz.toFixed(1)}m`;
     }
   }
-  if (urlParams.has('tod')) {
-    applyTimeOfDay(parseInt(urlParams.get('tod'), 10) || 0);
-    toastEl.classList.remove('show');
-  }
+  applyTimeOfDay(urlParams.has('tod') ? (parseInt(urlParams.get('tod'), 10) || 0) : 0, true);
   if (urlParams.get('ga') === '1') {
     overlay.classList.add('hidden');
     gaMapOpen = true;
