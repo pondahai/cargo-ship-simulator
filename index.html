@@ -576,11 +576,15 @@
   }
 
   function addFloor(minX, maxX, minZ, maxZ, y) {
-    floors.push({ minX, maxX, minZ, maxZ, y });
+    const f = { minX, maxX, minZ, maxZ, y, active: true };
+    floors.push(f);
+    return f;
   }
 
   function addRamp(minX, maxX, minZ, maxZ, axis, yStart, yEnd) {
-    ramps.push({ minX, maxX, minZ, maxZ, axis, yStart, yEnd });
+    const r = { minX, maxX, minZ, maxZ, axis, yStart, yEnd, active: true };
+    ramps.push(r);
+    return r;
   }
 
   // Materials Library
@@ -847,7 +851,7 @@
     });
     const sign = new THREE.Mesh(
       new THREE.PlaneGeometry(1.15, 0.22),
-      new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide })
+      new THREE.MeshStandardMaterial({ map: tex, roughness: 0.72, metalness: 0.05, side: THREE.DoubleSide })
     );
     sign.position.set(x, y, z);
     sign.rotation.y = rotY;
@@ -981,8 +985,8 @@
     // Port & Starboard lower antifouling red hull sides (y = -4.2 to 0.0)
     makeBox(1.2, 4.2, 86, -8.8, -2.1, 5, matHullRed);
     makeBox(1.2, 4.2, 86, 8.8, -2.1, 5, matHullRed);
-    // Double-bottom keel plate (strictly below Tank Top y = -2.35 so it never pokes into Engine Room or Pipe Tunnel!)
-    makeBox(18.6, 1.8, 86, 0, -3.35, 5, matHullRed);
+    // Double-bottom outer keel plate (at y = -4.42..-3.87 so Double-Bottom Ballast Tank y = -3.85..-2.05 is genuinely hollow!)
+    makeBox(18.6, 0.55, 86, 0, -4.15, 5, matHullRed);
     // Stern transom (upper navy + lower red)
     makeBox(18.6, 4.2, 1.2, 0, 2.0, 48.0, matHullDark, { solid: true });
     makeBox(18.6, 4.2, 1.2, 0, -2.1, 48.0, matHullRed);
@@ -1069,9 +1073,12 @@
     // Aft Mooring Deck (z = +41 to +48)
     makeBox(18.0, 0.4, 7.0, 0, 3.8, 44.5, matDeck, { walkable: true });
 
-    // Main Deck Bulwarks & Safety Railings
-    makeRailing(-8.8, -38, -8.8, 47.6, 4.0, 1.1);
-    makeRailing(8.8, -38, 8.8, 47.6, 4.0, 1.1);
+    // Main Deck Bulwarks & Safety Railings (with SOLAS Pilot Boarding Gate z=20.1..21.3 & Accommodation Ladder Gangway Gate z=29.5..31.0)
+    [-8.8, 8.8].forEach(rx => {
+      makeRailing(rx, -38, rx, 20.1, 4.0, 1.1);
+      makeRailing(rx, 21.3, rx, 29.5, 4.0, 1.1);
+      makeRailing(rx, 31.0, rx, 47.6, 4.0, 1.1);
+    });
     makeRailing(-8.8, 47.6, 8.8, 47.6, 4.0, 1.1);
 
     // Aft Mooring Winches & Bollards
@@ -1106,12 +1113,17 @@
     fDeck.receiveShadow = true;
     shipGroup.add(fDeck);
 
-    // Forecastle aft bulkhead wall (with stair gaps on port & stbd, and center Bosun's Store watertight door!)
-    makeWallZ(-3.6, 3.6, 4.0, 2.0, -38.0, 0.36, matWhiteSteel, 0.0, 1.4, 2.0);
+    // Forecastle aft bulkhead wall (fully sealed across full beam -8.7..+8.7, with center Bosun's Store watertight door)
+    makeWallZ(-4.5, 4.5, 4.0, 2.0, -38.0, 0.36, matWhiteSteel, 0.0, 1.4, 2.0);
     makeDoor(0.0, 4.0, -38.0, 'z', 1.3, 1.95, '船首水手長儲藏室水密門 (Bosun\'s Store)');
     makeSign('BOSUN STORE 水手長室', 0.0, 5.72, -37.78, 0);
-    makeBox(1.8, 2.0, 0.4, -7.8, 5.0, -38.0, matWhiteSteel, { solid: true });
-    makeBox(1.8, 2.0, 0.4, 7.8, 5.0, -38.0, matWhiteSteel, { solid: true });
+    makeBox(2.4, 2.0, 0.36, -7.5, 5.0, -38.0, matWhiteSteel, { solid: true });
+    makeBox(2.4, 2.0, 0.36, 7.5, 5.0, -38.0, matWhiteSteel, { solid: true });
+    // Sealed bulkhead panels directly behind the twin Forecastle stairs (full visual height y=4..6; collider stops at y=5.4 so climbing onto y=6.0 deck never snags)
+    makeBox(1.8, 2.0, 0.36, -5.4, 5.0, -38.0, matWhiteSteel);
+    makeBox(1.8, 2.0, 0.36, 5.4, 5.0, -38.0, matWhiteSteel);
+    addCollider(-6.3, -4.5, 4.0, 5.4, -38.18, -37.82);
+    addCollider(4.5, 6.3, 4.0, 5.4, -38.18, -37.82);
 
     // Twin Stairs from Main Deck (y=4.0, z=-34.5) to Forecastle (y=6.0, z=-38.0)
     makeStaircaseZ(-5.4, 1.8, -34.5, 4.0, -38.0, 6.0);
@@ -1125,7 +1137,9 @@
     for (let i = 0; i < bowPts.length - 1; i++) {
       makeRailing(bowPts[i][0], bowPts[i][1], bowPts[i+1][0], bowPts[i+1][1], 6.0, 1.1);
     }
-    makeRailing(-3.6, -38.0, 3.6, -38.0, 6.0, 1.05);
+    makeRailing(-4.5, -38.0, 4.5, -38.0, 6.0, 1.05);
+    makeRailing(-8.6, -38.0, -6.3, -38.0, 6.0, 1.05);
+    makeRailing(6.3, -38.0, 8.6, -38.0, 6.0, 1.05);
 
     // Anchor Windlasses & Chains
     [-3.0, 3.0].forEach(wx => {
@@ -1154,6 +1168,7 @@
   }
 
   // --- 4C. CARGO HOLDS & ISO SHIPPING CONTAINERS ---
+  const animatedHatches = [];
   function buildCargoArea() {
     const containerPalette = [
       { color: '#1b6ca8', name: 'MAERSK' },
@@ -1174,19 +1189,161 @@
       })
     );
 
-    // --- BAY 1 (Forward, z = -33 to -19): OPEN CARGO HOLD with Cell Guides! ---
-    // Coaming walls around Hold #1
-    makeBox(12.4, 1.2, 0.35, 0, 4.6, -33.0, matHatchCover, { solid: true });
+    // Helper: Authentic Bolted Oval Ballast Tank Manhole Cover (optional interactive [E] entry!)
+    function makeBoltedManhole(x, y, z, axis = 'y', enterCfg = null) {
+      const g = new THREE.Group();
+      g.position.set(x, y, z);
+      const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.36, 0.04, 16), matDarkSteel);
+      rim.scale.set(1.0, 1.0, 0.72);
+      const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.29, 0.055, 16), matHatchCover);
+      plate.scale.set(1.0, 1.0, 0.7);
+      g.add(rim, plate);
+      // 12 perimeter stainless bolts
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.075, 6), matChrome);
+        bolt.position.set(Math.cos(a) * 0.27, 0.01, Math.sin(a) * 0.19);
+        g.add(bolt);
+      }
+      // Lifting handle bar
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.03, 0.03), matSafetyYellow);
+      handle.position.set(0, 0.045, 0);
+      g.add(handle);
+      if (axis === 'x') g.rotation.z = -Math.PI / 2;
+      shipGroup.add(g);
+
+      if (enterCfg) {
+        interactables.push({
+          mesh: plate,
+          getLabel: () => `拆開螺栓鑽入 ${enterCfg.label}`,
+          action: () => {
+            player.pos.set(enterCfg.pos[0], enterCfg.pos[1], enterCfg.pos[2]);
+            player.vel.set(0, 0, 0);
+            player.yaw = enterCfg.yaw || 0;
+            playClickSound(220);
+            showToast(`已進入 ${enterCfg.label}（無照明密閉空間，請按 [F] 開啟手電筒）`);
+          },
+          maxDist: 3.3
+        });
+      }
+    }
+
+    // Helper: Authentic Watertight Cargo Hold Access Hatch (Booby Hatch 貨艙人員檢修口蓋)
+    function makeBoobyHatch(x, y, z, label, enterTarget = null) {
+      // Raised steel coaming (hollow 4-sided box)
+      const ch = 0.52, cw = 1.05;
+      makeBox(cw, ch, 0.08, x, y + ch / 2, z - cw / 2, matHatchCover);
+      makeBox(cw, ch, 0.08, x, y + ch / 2, z + cw / 2, matHatchCover);
+      makeBox(0.08, ch, cw, x - cw / 2, y + ch / 2, z, matHatchCover);
+      makeBox(0.08, ch, cw, x + cw / 2, y + ch / 2, z, matHatchCover);
+      // Dark shaft interior + vertical ladder rungs visible when lid opens
+      const shaft = new THREE.Mesh(new THREE.BoxGeometry(cw - 0.12, 0.16, cw - 0.12), new THREE.MeshBasicMaterial({ color: 0x090e14 }));
+      shaft.position.set(x, y + 0.12, z);
+      shipGroup.add(shaft);
+      for (let r = 0; r < 2; r++) {
+        const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.42, 8), matSafetyYellow);
+        rung.rotation.z = Math.PI / 2;
+        rung.position.set(x, y + 0.22 + r * 0.2, z - cw / 2 + 0.1);
+        shipGroup.add(rung);
+      }
+
+      // Hinged watertight lid with central quick-acting handwheel
+      const lidPivot = new THREE.Group();
+      lidPivot.position.set(x, y + ch, z - cw / 2);
+      const lid = new THREE.Mesh(new THREE.BoxGeometry(cw + 0.08, 0.07, cw + 0.08), matHatchCover);
+      lid.position.set(0, 0.035, cw / 2);
+      lid.castShadow = true;
+      const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.025, 8, 16), matSafetyYellow);
+      wheel.rotation.x = Math.PI / 2;
+      wheel.position.set(0, 0.12, cw / 2);
+      const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.025, 0.025), matSafetyYellow);
+      spoke.position.set(0, 0.12, cw / 2);
+      lidPivot.add(lid, wheel, spoke);
+      shipGroup.add(lidPivot);
+
+      addCollider(x - cw / 2 - 0.05, x + cw / 2 + 0.05, y, y + ch + 0.2, z - cw / 2 - 0.05, z + cw / 2 + 0.05);
+
+      const hState = { open: false, curAngle: 0, targetAngle: 0, lidPivot };
+      animatedHatches.push(hState);
+      interactables.push({
+        mesh: lid,
+        getLabel: () => hState.open ? `關閉 ${label}` : `開啟 ${label}`,
+        action: () => {
+          hState.open = !hState.open;
+          hState.targetAngle = hState.open ? -Math.PI * 0.48 : 0;
+          playClickSound(hState.open ? 310 : 210);
+          showToast(hState.open
+            ? (enterTarget ? `已開啟 ${label}，對準梯井按 [E] 可爬入密閉貨艙` : `已開啟：${label}`)
+            : `已關閉：${label}`);
+        },
+        maxDist: 3.4
+      });
+
+      if (enterTarget) {
+        interactables.push({
+          mesh: shaft,
+          getLabel: () => hState.open ? `攀爬直梯進入 ${enterTarget.name}` : `請先開啟 ${label}`,
+          action: () => {
+            if (!hState.open) {
+              hState.open = true;
+              hState.targetAngle = -Math.PI * 0.48;
+              playClickSound(310);
+              showToast(`已開啟 ${label}，請再按一次 [E] 爬入貨艙`);
+              return;
+            }
+            player.pos.set(enterTarget.pos[0], enterTarget.pos[1], enterTarget.pos[2]);
+            player.vel.set(0, 0, 0);
+            player.yaw = enterTarget.yaw;
+            playClickSound(260);
+            showToast(`已進入 ${enterTarget.name}（無照明密閉空間，請按 [F] 開啟手電筒）`);
+          },
+          maxDist: 3.4
+        });
+      }
+    }
+
+    // --- BAY 1 (Forward, z = -33 to -19): OPEN CARGO HOLD with Cell Guides & Walkable Australian Inspection Staircase! ---
+    // Coaming walls around Hold #1 (leaving x = +3.9..+5.4 open at z = -33.0 for Hold #1 Access Hatch & Staircase!)
+    makeBox(10.1, 1.2, 0.35, -1.15, 4.6, -33.0, matHatchCover, { solid: true });
+    makeBox(0.8, 1.2, 0.35, 5.8, 4.6, -33.0, matHatchCover, { solid: true });
     makeBox(12.4, 1.2, 0.35, 0, 4.6, -19.0, matHatchCover, { solid: true });
     makeBox(0.35, 1.2, 14.0, -6.0, 4.6, -26.0, matHatchCover, { solid: true });
     makeBox(0.35, 1.2, 14.0, 6.0, 4.6, -26.0, matHatchCover, { solid: true });
-    // Deep Cargo Hold Floor (Tank Top at y = -2.0) & Inner Bulkheads
-    makeBox(12.0, 0.4, 14.0, 0, -2.2, -26.0, matDarkSteel);
-    makeBox(12.0, 6.2, 0.3, 0, 1.0, -32.9, matDarkSteel);
-    makeBox(12.0, 6.2, 0.3, 0, 1.0, -19.1, matDarkSteel);
-    makeBox(0.3, 6.2, 14.0, -5.9, 1.0, -26.0, matDarkSteel);
-    makeBox(0.3, 6.2, 14.0, 5.9, 1.0, -26.0, matDarkSteel);
-    // Vertical Cell Guides & partial containers inside Hold #1
+
+    // Hold #1 Watertight Access Gate + Overhead Sign leading down Australian Inclined Staircase
+    makeDoor(4.65, 4.0, -33.0, 'z', 1.35, 1.25, '一號貨艙檢修門 (Hold #1 Access)', 0x5d3028);
+    makeSign('HOLD #1 ACCESS 一號貨艙檢修口', 4.65, 5.45, -33.22, Math.PI, '#4a2511', '#ffd54f');
+
+    // Deep Cargo Hold Floor (Walkable Tank Top at y = -2.0) & Solid Inner Bulkheads
+    makeBox(12.0, 0.4, 14.0, 0, -2.2, -26.0, matDarkSteel, { walkable: true });
+    makeBox(12.0, 5.6, 0.3, 0, 0.8, -32.9, matDarkSteel, { solid: true }); // Stops at y=3.6 so stair entry at y=4.0 is smooth
+    makeBox(12.0, 6.2, 0.3, 0, 1.0, -19.1, matDarkSteel, { solid: true });
+    makeBox(0.3, 6.2, 14.0, -5.9, 1.0, -26.0, matDarkSteel, { solid: true });
+    makeBox(0.3, 6.2, 14.0, 5.9, 1.0, -26.0, matDarkSteel, { solid: true });
+
+    // Australian Inclined Inspection Staircase inside Hold #1 (Main Deck y=4.0 -> Mid Platform y=1.0 -> Tank Top y=-2.0)
+    makeStaircaseZ(4.65, 1.15, -32.8, 4.0, -28.3, 1.0, matGrate);
+    makeBox(1.2, 0.14, 1.5, 4.65, 0.93, -27.55, matGrate, { walkable: true });
+    makeRailing(4.06, -28.3, 4.06, -26.8, 1.0, 1.0, matSafetyYellow);
+    makeRailing(5.24, -28.3, 5.24, -26.8, 1.0, 1.0, matSafetyYellow);
+    makeStaircaseZ(4.65, 1.15, -26.8, 1.0, -22.3, -2.0, matGrate);
+
+    // Flush Double-Bottom Ballast Tank Manholes (Enterable into WBT NO.1!) & Aft Bilge Well Grating on Hold #1 Tank Top
+    makeBoltedManhole(3.4, -1.99, -29.5, 'y', {
+      label: 'WBT NO.1 一號船底壓載水艙',
+      pos: [3.4, -3.85, -28.2],
+      yaw: 0
+    });
+    makeBoltedManhole(3.4, -1.99, -23.0, 'y', {
+      label: 'WBT NO.1 一號船底壓載水艙',
+      pos: [3.4, -3.85, -23.0],
+      yaw: 0
+    });
+    makeSign('WBT NO.1 (S) 船底壓載艙人孔 ↓', 5.72, -0.6, -29.5, -Math.PI / 2, '#5a1e1e', '#ffd54f');
+    makeBox(0.95, 0.05, 0.95, 4.65, -1.98, -20.2, matGrate); // Bilge Well Grating (艙底污水井)
+    makeSign('BILGE WELL 艙底污水井', 5.72, -0.8, -20.2, -Math.PI / 2, '#1b4332', '#ffffff');
+
+    // Vertical Cell Guides & partial containers inside Hold #1 (3 rows leaving starboard inspection aisle clear!)
     for (let cx = -4.2; cx <= 4.2; cx += 2.8) {
       const guide = new THREE.Mesh(new THREE.BoxGeometry(0.14, 6.6, 0.14), matSafetyYellow);
       guide.position.set(cx, 1.2, -32.5);
@@ -1195,14 +1352,274 @@
       guide2.position.set(cx, 1.2, -19.5);
       shipGroup.add(guide2);
     }
-    // Containers sitting down inside Hold #1
-    for (let row = 0; row < 4; row++) {
+    // Containers sitting down inside Hold #1 (rows 0..2 with solid colliders on bottom tier)
+    for (let row = 0; row < 3; row++) {
       const mat = containerMats[row % containerMats.length];
-      makeBox(2.44, 2.59, 12.19, -4.1 + row * 2.72, -0.7, -26.0, mat);
+      makeBox(2.44, 2.59, 12.19, -4.1 + row * 2.72, -0.7, -26.0, mat, { solid: true });
       if (row === 1 || row === 2) {
         makeBox(2.44, 2.59, 12.19, -4.1 + row * 2.72, 1.92, -26.0, containerMats[(row + 3) % containerMats.length]);
       }
     }
+
+    // Main Deck Watertight Booby Hatches (貨艙人員檢修口蓋) for Hold #2 & Hold #3 — Enterable into Pitch-Black Interiors!
+    makeBoobyHatch(-5.4, 4.0, -15.8, '二號貨艙檢修口蓋 (Hold #2 Access Hatch)', {
+      name: '二號密閉貨艙內部 (Cargo Hold #2)',
+      pos: [-4.6, -2.0, -13.6],
+      yaw: Math.PI
+    });
+    makeSign('HOLD #2 ACCESS 二號貨艙口', -4.15, 4.95, -15.8, Math.PI, '#4a2511', '#ffd54f');
+    makeBoobyHatch(-5.4, 4.0, 18.8, '三號貨艙檢修口蓋 (Hold #3 Access Hatch)', {
+      name: '三號密閉貨艙內部 (Cargo Hold #3)',
+      pos: [-4.6, -2.0, 16.6],
+      yaw: 0
+    });
+    makeSign('HOLD #3 ACCESS 三號貨艙口', -4.15, 4.95, 18.8, 0, '#4a2511', '#ffd54f');
+    // Wing Ballast Tank Bolted Manholes on Main Deck side walkways (ALL 4 genuinely enterable into Wing Ballast Tanks!)
+    makeBoltedManhole(-7.5, 4.01, -16.5, 'y', {
+      label: 'WBT NO.2 (P-UPPER) 左舷前上邊壓載艙',
+      pos: [-7.1, 1.0, -15.5],
+      yaw: Math.PI
+    });
+    makeBoltedManhole(7.5, 4.01, -16.5, 'y', {
+      label: 'WBT NO.2 (S) 右舷前邊壓載艙',
+      pos: [7.1, -2.0, -15.5],
+      yaw: Math.PI
+    });
+    makeBoltedManhole(-7.5, 4.01, 18.8, 'y', {
+      label: 'WBT NO.3 (P-UPPER) 左舷後上邊壓載艙',
+      pos: [-7.1, 1.0, 17.5],
+      yaw: 0
+    });
+    makeBoltedManhole(7.5, 4.01, 18.8, 'y', {
+      label: 'WBT NO.3 (S) 右舷後邊壓載艙',
+      pos: [7.1, -2.0, 17.5],
+      yaw: 0
+    });
+
+    // =========================================================================
+    // PITCH-BLACK ENTERABLE INTERIORS: CLOSED CARGO HOLDS #2 & #3 + DOUBLE-BOTTOM WBT NO.2
+    // (Zero built-in lights — authentic enclosed-space inspection with [F] Flashlight!)
+    // =========================================================================
+    const matBallastEpoxy = new THREE.MeshStandardMaterial({ color: 0x3b484f, roughness: 0.84, metalness: 0.35 });
+    const matZincAnode = new THREE.MeshStandardMaterial({ color: 0x9faab2, roughness: 0.45, metalness: 0.72 });
+
+    // Helper: Vertical Steel Access Ladder inside enclosed holds & ballast tanks (interactive [E] to climb out)
+    function makeVerticalExitLadder(x, yBottom, yTop, z, wallSide, exitLabel, exitPos, exitYaw = 0) {
+      const h = yTop - yBottom;
+      const g = new THREE.Group();
+      // Twin side rails
+      [-0.22, 0.22].forEach(ox => {
+        const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, h, 8), matSafetyYellow);
+        rail.position.set(x + ox, yBottom + h / 2, z);
+        g.add(rail);
+      });
+      // Rungs every 0.32m
+      const rungCount = Math.floor(h / 0.32);
+      for (let i = 0; i < rungCount; i++) {
+        const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.44, 8), matSafetyYellow);
+        rung.rotation.z = Math.PI / 2;
+        rung.position.set(x, yBottom + 0.25 + i * 0.32, z);
+        g.add(rung);
+      }
+      shipGroup.add(g);
+      // Invisible interactive hit box for easy [E] climbing (transparent opacity=0 so Raycaster always hits it!)
+      const hitMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.85, Math.min(2.6, h), 0.55),
+        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
+      );
+      hitMesh.position.set(x, yBottom + Math.min(1.3, h / 2), z);
+      shipGroup.add(hitMesh);
+      interactables.push({
+        mesh: hitMesh,
+        getLabel: () => exitLabel,
+        action: () => {
+          player.pos.set(exitPos[0], exitPos[1], exitPos[2]);
+          player.vel.set(0, 0, 0);
+          player.yaw = exitYaw;
+          playClickSound(320);
+          showToast(`已返回：${exitLabel.replace(/^攀爬直梯返回\s*/, '')}`);
+        },
+        maxDist: 3.2
+      });
+    }
+
+    // --- A. CLOSED CARGO HOLD #2 (z = -15..-1) & HOLD #3 (z = +4..+18) INTERIORS ---
+    [
+      { num: 2, zMin: -15.0, zMax: -1.0, ladderZ: -14.65, exitPos: [-5.4, 4.0, -17.0], exitYaw: Math.PI },
+      { num: 3, zMin: 4.0,   zMax: 18.0, ladderZ: 17.65,  exitPos: [-5.4, 4.0, 20.0],  exitYaw: 0 }
+    ].forEach(hold => {
+      const zMid = (hold.zMin + hold.zMax) / 2;
+      const zLen = hold.zMax - hold.zMin;
+      // Walkable Tank Top Floor (y = -2.0) & Overhead Hatch Cover Underside Ceiling (y = 3.92)
+      makeBox(11.8, 0.22, zLen, 0, -2.11, zMid, matDarkSteel, { walkable: true });
+      makeBox(11.8, 0.16, zLen, 0, 3.92, zMid, matHatchCover);
+      // Transverse overhead hatch cover support beams
+      for (let bz = hold.zMin + 2; bz <= hold.zMax - 2; bz += 3.2) {
+        makeBox(11.6, 0.35, 0.24, 0, 3.7, bz, matDarkSteel);
+      }
+      // 4 Solid Enclosing Steel Bulkheads (keeping player cleanly inside closed hold)
+      makeBox(11.8, 6.0, 0.25, 0, 1.0, hold.zMin, matDarkSteel, { solid: true });
+      makeBox(11.8, 6.0, 0.25, 0, 1.0, hold.zMax, matDarkSteel, { solid: true });
+      makeBox(0.25, 6.0, zLen, -5.85, 1.0, zMid, matDarkSteel, { solid: true });
+      makeBox(0.25, 6.0, zLen, 5.85, 1.0, zMid, matDarkSteel, { solid: true });
+
+      // Vertical Cell Guides & Below-Deck Stacked 40ft Containers (3 starboard rows; port inspection aisle x = -5.7..-2.6 open!)
+      for (let row = 0; row < 3; row++) {
+        const cx = -1.2 + row * 2.75; // x = -1.2, +1.55, +4.3
+        const mat = containerMats[(hold.num * 2 + row) % containerMats.length];
+        makeBox(2.44, 2.59, 12.19, cx, -0.7, zMid, mat, { solid: true });
+        makeBox(2.44, 2.59, 12.19, cx, 1.92, zMid, containerMats[(hold.num * 2 + row + 3) % containerMats.length]);
+      }
+      [-2.5, 0.2, 2.9, 5.5].forEach(gx => {
+        const g1 = new THREE.Mesh(new THREE.BoxGeometry(0.14, 5.9, 0.14), matSafetyYellow);
+        g1.position.set(gx, 1.0, hold.zMin + 0.55);
+        const g2 = g1.clone();
+        g2.position.set(gx, 1.0, hold.zMax - 0.55);
+        shipGroup.add(g1, g2);
+      });
+
+      // Bilge Well Grating & Reefer Power Junction Box on port bulkhead (offset +2.4m so it never overlaps WBT manhole sign!)
+      makeBox(0.95, 0.05, 0.95, -4.6, -1.98, hold.zMax - 1.2, matGrate);
+      makeBox(0.22, 0.75, 0.55, -5.65, -0.7, zMid + 2.4, matSafetyYellow);
+
+      // Vertical Access Ladder back up to Main Deck Booby Hatch
+      makeVerticalExitLadder(
+        -4.6, -2.0, 3.85, hold.ladderZ, 'z',
+        `攀爬直梯返回 主甲板 (${hold.num}號貨艙口)`,
+        hold.exitPos, hold.exitYaw
+      );
+      makeSign(`HOLD #${hold.num} EXIT ↑ 主甲板檢修口`, -4.6, -0.35, hold.ladderZ + (hold.num === 2 ? 0.18 : -0.18), hold.num === 2 ? 0 : Math.PI, '#4a2511', '#ffd54f');
+
+      // Inside Hold #2 & Hold #3 Tank Top: Interactive Flush Manhole straight down into Double-Bottom WBT NO.2 / NO.3!
+      const wbtZ = hold.num === 2 ? -8.0 : 11.0;
+      makeBoltedManhole(-4.1, -1.99, wbtZ, 'y', {
+        label: `WBT NO.${hold.num} 船底壓載水艙`,
+        pos: [-4.1, -3.85, wbtZ],
+        yaw: -Math.PI / 2
+      });
+      makeSign(`WBT NO.${hold.num} 船底壓載艙人孔 ↓`, -5.68, -0.75, wbtZ, Math.PI / 2, '#5a1e1e', '#ffd54f');
+    });
+
+    // --- B. ALL THREE DOUBLE-BOTTOM WATER BALLAST TANKS (WBT NO.1, NO.2, NO.3: y = -3.85..-2.05) ---
+    const yDB = -3.85;
+    const hDB = 1.8;
+    [
+      {
+        num: 1, zMin: -33.0, zMax: -19.0, pipeZ: -26.0,
+        holdLadder: [3.4, -29.5], holdExit: [3.4, -2.0, -28.4], holdName: '一號貨艙底層 (Hold #1)'
+      },
+      {
+        num: 2, zMin: -15.5, zMax: -0.5, pipeZ: -8.0,
+        holdLadder: [-4.1, -8.7], holdExit: [-4.1, -2.0, -7.2], holdName: '二號貨艙底層 (Hold #2)'
+      },
+      {
+        num: 3, zMin: 4.0, zMax: 18.0, pipeZ: 11.0,
+        holdLadder: [-4.1, 10.3], holdExit: [-4.1, -2.0, 11.8], holdName: '三號貨艙底層 (Hold #3)'
+      }
+    ].forEach(db => {
+      const zMid = (db.zMin + db.zMax) / 2;
+      const zLen = db.zMax - db.zMin;
+      // Outer bottom shell floor (walkable) & Tank Top underside ceiling
+      makeBox(11.6, 0.16, zLen, 0, yDB - 0.08, zMid, matBallastEpoxy, { walkable: true });
+      makeBox(11.6, 0.12, zLen, 0, yDB + hDB, zMid, matBallastEpoxy);
+      // 4 Enclosing Watertight Tank Boundaries
+      makeBox(11.6, hDB, 0.22, 0, yDB + hDB / 2, db.zMin, matBallastEpoxy, { solid: true });
+      makeBox(11.6, hDB, 0.22, 0, yDB + hDB / 2, db.zMax, matBallastEpoxy, { solid: true });
+      makeBox(0.22, hDB, zLen, -5.8, yDB + hDB / 2, zMid, matBallastEpoxy, { solid: true });
+      makeBox(0.22, hDB, zLen, 5.8, yDB + hDB / 2, zMid, matBallastEpoxy, { solid: true });
+
+      // 4 Transverse Solid Floor Web Frames (船底實肋板) with Authentic Manhole Lightening Cutouts
+      for (let idx = 0; idx < 4; idx++) {
+        const fz = db.zMin + 2.8 + idx * ((zLen - 5.6) / 3);
+        const holeX = (idx % 2 === 0) ? -2.2 : 1.6;
+        const holeW = 1.55;
+        const leftW = (holeX - holeW / 2) - (-5.7);
+        const rightW = 5.7 - (holeX + holeW / 2);
+        if (leftW > 0.1) makeBox(leftW, hDB, 0.16, -5.7 + leftW / 2, yDB + hDB / 2, fz, matBallastEpoxy, { solid: true });
+        if (rightW > 0.1) makeBox(rightW, hDB, 0.16, (holeX + holeW / 2) + rightW / 2, yDB + hDB / 2, fz, matBallastEpoxy, { solid: true });
+        makeBox(holeW, 0.28, 0.18, holeX, yDB + hDB - 0.14, fz, matBallastEpoxy);
+        makeBox(holeW, 0.14, 0.18, holeX, yDB + 0.07, fz, matBallastEpoxy);
+
+        // Zinc Sacrificial Anodes (防蝕鋅塊) bolted along ribs
+        [-4.2, 0.0, 4.2].forEach(ax => {
+          if (Math.abs(ax - holeX) > 1.1) {
+            makeBox(0.32, 0.09, 0.08, ax, yDB + 0.45, fz + 0.13, matZincAnode);
+          }
+        });
+      }
+
+      // Longitudinal Overhead Stiffeners & Ballast Suction Pipe + Bellmouth
+      [-3.8, 0.0, 3.8].forEach(lx => {
+        makeBox(0.14, 0.22, zLen - 0.3, lx, yDB + hDB - 0.12, zMid, matDarkSteel);
+      });
+      const bPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, zLen - 1.4, 10), matPipeBlue);
+      bPipe.rotation.x = Math.PI / 2;
+      bPipe.position.set(-4.8, yDB + 0.35, zMid);
+      shipGroup.add(bPipe);
+      const bellmouth = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.28, 0.26, 12), matPipeBlue);
+      bellmouth.position.set(-4.8, yDB + 0.16, db.zMax - 1.1);
+      shipGroup.add(bellmouth);
+
+      // Exit Ladder back up to 62m Pipe Tunnel
+      makeVerticalExitLadder(
+        -5.45, yDB, yDB + hDB - 0.05, db.pipeZ, 'x',
+        '攀爬人孔返回 62m 管路通道 (Pipe Tunnel)',
+        [-6.85, -2.0, db.pipeZ], Math.PI / 2
+      );
+      makeSign(`WBT NO.${db.num} EXIT ↑ 管路通道`, -5.66, yDB + 1.15, db.pipeZ + 0.95, Math.PI / 2, '#5a1e1e', '#ffd54f');
+
+      // Second Exit Ladder back up to corresponding Cargo Hold Tank Top
+      makeVerticalExitLadder(
+        db.holdLadder[0], yDB, yDB + hDB - 0.05, db.holdLadder[1], 'z',
+        `攀爬人孔返回 ${db.holdName}`,
+        db.holdExit, 0
+      );
+    });
+
+    // --- C. ALL FOUR WING BALLAST TANKS (舷側雙層殼邊壓載水艙 — Pitch-Black Vertical Side Tanks!) ---
+    // Port Wing Tanks sit cleanly ABOVE the Pipe Tunnel (y = +1.0..+3.9); Starboard Wing Tanks span full hull depth (y = -2.0..+3.9)!
+    [
+      { name: 'WBT NO.2 (P-UPPER) 左舷前上邊壓載艙', side: -1, xMin: -8.1, xMax: -6.1, zMin: -18.2, zMax: -1.2, yBot: 1.0,  yTop: 3.9, ladderZ: -16.5, exitPos: [-7.5, 4.0, -15.3] },
+      { name: 'WBT NO.2 (S) 右舷前邊壓載艙',        side:  1, xMin:  6.1, xMax:  8.1, zMin: -18.2, zMax: -1.2, yBot: -2.0, yTop: 3.9, ladderZ: -16.5, exitPos: [ 7.5, 4.0, -15.3] },
+      { name: 'WBT NO.3 (P-UPPER) 左舷後上邊壓載艙', side: -1, xMin: -8.1, xMax: -6.1, zMin:  3.8,  zMax: 20.2, yBot: 1.0,  yTop: 3.9, ladderZ:  18.8, exitPos: [-7.5, 4.0,  17.6] },
+      { name: 'WBT NO.3 (S) 右舷後邊壓載艙',        side:  1, xMin:  6.1, xMax:  8.1, zMin:  3.8,  zMax: 20.2, yBot: -2.0, yTop: 3.9, ladderZ:  18.8, exitPos: [ 7.5, 4.0,  17.6] }
+    ].forEach(wt => {
+      const xMid = (wt.xMin + wt.xMax) / 2;
+      const xW = wt.xMax - wt.xMin;
+      const zMid = (wt.zMin + wt.zMax) / 2;
+      const zLen = wt.zMax - wt.zMin;
+      const hW = wt.yTop - wt.yBot;
+
+      // Floor (walkable), ceiling & 4 watertight enclosing bulkheads
+      makeBox(xW, 0.14, zLen, xMid, wt.yBot - 0.07, zMid, matBallastEpoxy, { walkable: true });
+      makeBox(xW, 0.12, zLen, xMid, wt.yTop, zMid, matBallastEpoxy);
+      makeBox(xW, hW, 0.18, xMid, wt.yBot + hW / 2, wt.zMin, matBallastEpoxy, { solid: true });
+      makeBox(xW, hW, 0.18, xMid, wt.yBot + hW / 2, wt.zMax, matBallastEpoxy, { solid: true });
+      makeBox(0.16, hW, zLen, wt.xMin, wt.yBot + hW / 2, zMid, matBallastEpoxy, { solid: true });
+      makeBox(0.16, hW, zLen, wt.xMax, wt.yBot + hW / 2, zMid, matBallastEpoxy, { solid: true });
+
+      // Transverse Wing Tank Web Frames (舷側強肋骨) with 1.15m walkthrough lightening cutouts + Zinc Anodes
+      for (let fz = wt.zMin + 3.2; fz <= wt.zMax - 3.0; fz += 3.5) {
+        // Side nib frames leaving center 1.15m walkable aisle completely clear
+        makeBox(0.42, hW, 0.16, wt.xMin + 0.21, wt.yBot + hW / 2, fz, matBallastEpoxy, { solid: true });
+        makeBox(0.42, hW, 0.16, wt.xMax - 0.21, wt.yBot + hW / 2, fz, matBallastEpoxy, { solid: true });
+        makeBox(xW, 0.3, 0.18, xMid, wt.yTop - 0.15, fz, matBallastEpoxy);
+        makeBox(0.08, 0.34, 0.08, xMid + wt.side * 0.84, wt.yBot + 0.85, fz + 0.2, matZincAnode);
+      }
+
+      // Vertical Ballast Sounding Pipe (測深管) running floor to deck
+      const sPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, hW, 8), matPipeBlue);
+      sPipe.position.set(xMid - wt.side * 0.72, wt.yBot + hW / 2, zMid);
+      shipGroup.add(sPipe);
+
+      // Vertical Exit Ladder back up to Main Deck Manhole
+      makeVerticalExitLadder(
+        xMid, wt.yBot, wt.yTop - 0.05, wt.ladderZ, 'z',
+        `攀爬直梯返回 主甲板 (${wt.name.split(' ')[0]} 邊壓載艙口)`,
+        wt.exitPos, 0
+      );
+      makeSign('EXIT ↑ 主甲板人孔', xMid - wt.side * 0.86, wt.yBot + 1.35, wt.ladderZ + (wt.ladderZ < 0 ? 0.95 : -0.95), wt.side < 0 ? -Math.PI / 2 : Math.PI / 2, '#5a1e1e', '#ffd54f');
+    });
 
     // --- BAY 2 (z = -15 to -1) & BAY 3 (z = +4 to +18): Closed Hatch Covers + Stacked 40ft Containers ---
     const bays = [
@@ -1433,6 +1850,69 @@
       makeBox(1.75, 0.18, 0.18, -6.9, y + h - 0.12, fz, matSafetyYellow);
       addInteriorLight(-6.9, y + h - 0.2, fz, 0.75, 13, 0xffdfa8);
     }
+
+    // Authentic Double-Bottom Water Ballast Tank (WBT) Bolted Manholes & Valves along Pipe Tunnel
+    [
+      { z: -26.0, name: 'WBT NO.1 (P) 壓載艙人孔' },
+      { z: -8.0,  name: 'WBT NO.2 (P) 壓載艙人孔' },
+      { z: 11.0,  name: 'WBT NO.3 (P) 壓載艙人孔' }
+    ].forEach(wbt => {
+      // Floor bolted oval manhole cover into Double-Bottom Ballast Tank
+      const fg = new THREE.Group();
+      fg.position.set(-6.85, y + 0.01, wbt.z);
+      const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.34, 0.035, 16), matDarkSteel);
+      rim.scale.set(0.72, 1.0, 1.0);
+      const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.048, 16), matHatchCover);
+      lid.scale.set(0.7, 1.0, 1.0);
+      fg.add(rim, lid);
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        const b = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.065, 6), matChrome);
+        b.position.set(Math.cos(a) * 0.18, 0.01, Math.sin(a) * 0.25);
+        fg.add(b);
+      }
+      shipGroup.add(fg);
+
+      // Side-wall bolted inspection manhole on inner bulkhead (x = -6.12)
+      const wg = new THREE.Group();
+      wg.position.set(-6.12, y + 0.95, wbt.z + 1.3);
+      wg.rotation.z = Math.PI / 2;
+      const wrim = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.32, 0.04, 16), matDarkSteel);
+      wrim.scale.set(0.72, 1.0, 1.0);
+      const wlid = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.055, 16), matHatchCover);
+      wlid.scale.set(0.7, 1.0, 1.0);
+      wg.add(wrim, wlid);
+      shipGroup.add(wg);
+
+      // Ballast branch valve & red handwheel
+      const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.4, 10), matPipeBlue);
+      branch.rotation.z = Math.PI / 2;
+      branch.position.set(-6.28, y + 0.55, wbt.z - 1.1);
+      const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.022, 8, 16), matPipeRed);
+      wheel.rotation.y = Math.PI / 2;
+      wheel.position.set(-6.48, y + 0.55, wbt.z - 1.1);
+      shipGroup.add(branch, wheel);
+
+      // SOLAS Enclosed Space Warning & Tank ID Sign
+      makeSign(`${wbt.name} (ENCLOSED SPACE)`, -6.12, y + 1.68, wbt.z + 1.3, -Math.PI / 2, '#5a1e1e', '#ffd54f');
+
+      // ALL 3 Pipe Tunnel floor & side-wall manholes are genuinely enterable into WBT NO.1 / NO.2 / NO.3!
+      const enterWbtAction = () => {
+        player.pos.set(-4.8, -3.85, wbt.z);
+        player.vel.set(0, 0, 0);
+        player.yaw = -Math.PI / 2;
+        playClickSound(220);
+        showToast(`已進入 ${wbt.name} 船底壓載水艙（無照明密閉空間，請按 [F] 開啟手電筒）`);
+      };
+      [lid, wlid].forEach(hitTarget => {
+        interactables.push({
+          mesh: hitTarget,
+          getLabel: () => `拆開螺栓鑽入 ${wbt.name} (Enter Double-Bottom Tank)`,
+          action: enterWbtAction,
+          maxDist: 3.2
+        });
+      });
+    });
   }
 
   // --- 4D-4. BOW COMPARTMENTS (船首水手長儲藏室 Bosun's Store y=3.2 + 船首側推器室 Bow Thruster Room y=-2.0) ---
@@ -1460,11 +1940,9 @@
     makeBox(0.25, 8.2, 8.4, 5.0, 1.8, -42.2, matDarkSteel, { solid: true });
     makeBox(10.0, 8.2, 0.25, 0, 1.8, -46.4, matDarkSteel, { solid: true });
     makeBox(10.0, 5.2, 0.25, 0, 0.6, -38.0, matDarkSteel, { solid: true }); // Below Bosun's Store aft wall (y=-2..3.2)
-    // Seal upper aft corners of Bosun's Store (x = -5.0..-3.5 and +3.5..+5.0, y = 3.2..6.0) & sides below threshold
-    makeBox(1.6, 2.8, 0.25, -4.25, 4.6, -38.0, matDarkSteel, { solid: true });
-    makeBox(1.6, 2.8, 0.25, 4.25, 4.6, -38.0, matDarkSteel, { solid: true });
-    makeBox(2.9, 0.85, 0.25, -2.2, 3.6, -38.0, matDarkSteel, { solid: true });
-    makeBox(2.9, 0.85, 0.25, 2.2, 3.6, -38.0, matDarkSteel, { solid: true });
+    // Seal Bosun's Store aft wall below Main Deck level (y = 3.2..4.0) on both sides of the center entry ramp
+    makeBox(4.3, 0.85, 0.25, -2.9, 3.6, -38.0, matDarkSteel, { solid: true });
+    makeBox(4.3, 0.85, 0.25, 2.9, 3.6, -38.0, matDarkSteel, { solid: true });
 
     // Twin Vertical Anchor Chain Locker Pipes (錨鏈管 descending from Forecastle windlasses!)
     [-2.8, 2.0].forEach(cx => {
@@ -2022,8 +2500,291 @@
     });
   }
 
+  // --- 4A-2. SOLAS BOARDING SYSTEMS (Accommodation Ladders 舷梯 + Pilot Boarding Stations 引水梯) ---
+  const animatedLadders = [];
+  function buildBoardingSystems() {
+    const matAluminum = new THREE.MeshStandardMaterial({ color: 0xc5cfd6, roughness: 0.34, metalness: 0.78 });
+    const matRope = new THREE.MeshStandardMaterial({ color: 0xc2a878, roughness: 0.92, metalness: 0.02 });
+    const matRubber = new THREE.MeshStandardMaterial({ color: 0x1e2226, roughness: 0.88, metalness: 0.08 });
+    const matSafetyNet = new THREE.MeshStandardMaterial({
+      color: 0xd9c79e, roughness: 0.9, transparent: true, opacity: 0.45, side: THREE.DoubleSide
+    });
+
+    // Reusable Hull "PILOT" Boarding Mark Texture
+    const pilotMarkTex = makeCanvasTexture(256, 128, (ctx, w, h) => {
+      ctx.fillStyle = '#18304d';
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(8, 8, w - 16, h - 16);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 54px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('PILOT', w / 2, h / 2 + 2);
+    });
+    const matPilotMark = new THREE.MeshStandardMaterial({ map: pilotMarkTex, roughness: 0.55 });
+
+    // Helper: Orange SOLAS Lifebuoy Ring
+    function makeLifebuoy(x, y, z, rotY) {
+      const buoy = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.09, 10, 20), matOrange);
+      buoy.position.set(x, y, z);
+      buoy.rotation.y = rotY;
+      shipGroup.add(buoy);
+      // Reflective white tape bands
+      for (let i = 0; i < 4; i++) {
+        const a = (i * Math.PI) / 2;
+        const band = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.19, 0.08), matWhiteSteel);
+        band.position.set(Math.cos(a) * 0.34, Math.sin(a) * 0.34, 0);
+        buoy.add(band);
+      }
+    }
+
+    [-1, 1].forEach(side => {
+      const sideLabel = side < 0 ? '左舷 (Port)' : '右舷 (Stbd)';
+      const railX = side * 8.8;
+
+      // =========================================================
+      // A. ACCOMMODATION LADDER (舷梯 / 大梯) at z = 22.9..31.0
+      // =========================================================
+      const platMinX = Math.min(side * 8.8, side * 10.6);
+      const platMaxX = Math.max(side * 8.8, side * 10.6);
+      const ladMinX = Math.min(side * 9.5, side * 10.6);
+      const ladMaxX = Math.max(side * 9.5, side * 10.6);
+      const ladCenterX = side * 10.05;
+
+      // Upper Turning Platform (上旋轉平台 at y = 4.0, z = 29.5..31.0)
+      makeBox(1.8, 0.14, 1.5, side * 9.7, 3.93, 30.25, matAluminum);
+      // Upper Platform Guardrails (outer, aft, and inner-forward gap; front z=29.5 opens to ladder)
+      makeRailing(side * 10.6, 29.5, side * 10.6, 31.0, 4.0, 1.05, matWhiteSteel, false);
+      makeRailing(side * 8.8, 31.0, side * 10.6, 31.0, 4.0, 1.05, matWhiteSteel, false);
+      makeRailing(side * 8.8, 29.5, side * 9.5, 29.5, 4.0, 1.05, matWhiteSteel, false);
+
+      // Gangway Gate Safety Bar across railing opening (z = 29.5..31.0)
+      const gatePivot = new THREE.Group();
+      gatePivot.position.set(railX, 4.0, 31.0);
+      const gateTop = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 1.5), matSafetyYellow);
+      gateTop.position.set(0, 1.05, -0.75);
+      const gateMid = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 1.5), matSafetyYellow);
+      gateMid.position.set(0, 0.55, -0.75);
+      gatePivot.add(gateTop, gateMid);
+      shipGroup.add(gatePivot);
+      const gateCol = addCollider(railX - 0.12, railX + 0.12, 4.0, 5.4, 29.5, 31.0);
+
+      // Hinged Aluminum Ladder Flight (pivoting at y=4.0, z=29.5, length 7.38m -> reaches y=0.7, z=22.9)
+      const deployAngle = Math.atan2(3.3, 6.6); // ~26.57 deg
+      const ladderLen = Math.hypot(6.6, 3.3);
+      const ladderPivot = new THREE.Group();
+      ladderPivot.position.set(ladCenterX, 4.0, 29.5);
+      shipGroup.add(ladderPivot);
+
+      // Side Stringers & Handrails
+      [-0.55, 0.55].forEach(ox => {
+        const stringer = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.2, ladderLen), matAluminum);
+        stringer.position.set(ox, -0.06, -ladderLen / 2);
+        stringer.castShadow = true;
+        ladderPivot.add(stringer);
+
+        const topRail = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.045, ladderLen), matSafetyYellow);
+        topRail.position.set(ox, 0.96, -ladderLen / 2);
+        ladderPivot.add(topRail);
+
+        const midRail = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, ladderLen), matWhiteSteel);
+        midRail.position.set(ox, 0.5, -ladderLen / 2);
+        ladderPivot.add(midRail);
+
+        for (let i = 0; i <= 5; i++) {
+          const pz = -(ladderLen * i) / 5;
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.02, 0.04), matWhiteSteel);
+          post.position.set(ox, 0.48, pz);
+          ladderPivot.add(post);
+        }
+      });
+
+      // 18 Non-Slip Aluminum Steps
+      const stepCount = 18;
+      for (let i = 0; i < stepCount; i++) {
+        const sz = -((i + 0.5) / stepCount) * ladderLen;
+        const step = new THREE.Mesh(new THREE.BoxGeometry(1.06, 0.05, 0.3), matAluminum);
+        step.position.set(0, 0.0, sz);
+        step.rotation.x = deployAngle; // Level treads when deployed
+        step.castShadow = true;
+        step.receiveShadow = true;
+        ladderPivot.add(step);
+      }
+
+      // Lower Boarding Platform (counter-rotated so it stays level at y=0.7!)
+      const lowerPlatPivot = new THREE.Group();
+      lowerPlatPivot.position.set(0, 0, -ladderLen);
+      ladderPivot.add(lowerPlatPivot);
+      const lowerDeck = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.12, 1.35), matAluminum);
+      lowerDeck.position.set(0, -0.06, -0.68);
+      lowerPlatPivot.add(lowerDeck);
+      // Rubber fender roller underneath lower platform
+      const roller = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.1, 10), matRubber);
+      roller.rotation.z = Math.PI / 2;
+      roller.position.set(0, -0.18, -1.15);
+      lowerPlatPivot.add(roller);
+      // Lower platform forward & outer safety rails
+      const lpFront = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.05, 0.05), matSafetyYellow);
+      lpFront.position.set(0, 0.98, -1.32);
+      const lpOuter = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 1.35), matSafetyYellow);
+      lpOuter.position.set(side * 0.6, 0.98, -0.68);
+      lowerPlatPivot.add(lpFront, lpOuter);
+      [[-0.6, -1.32], [0.6, -1.32], [side * 0.6, -0.05]].forEach(([px, pz]) => {
+        const lp = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.0, 0.04), matWhiteSteel);
+        lp.position.set(px, 0.49, pz);
+        lowerPlatPivot.add(lp);
+      });
+
+      // SOLAS Under-Ladder Safety Net (visible when deployed)
+      const safetyNet = new THREE.Mesh(new THREE.PlaneGeometry(1.5, ladderLen), matSafetyNet);
+      safetyNet.rotation.x = -Math.PI / 2;
+      safetyNet.position.set(0, -0.22, -ladderLen / 2);
+      safetyNet.visible = false;
+      ladderPivot.add(safetyNet);
+
+      // Davit Arm, Electric Winch & Interactive Control Pedestal on Main Deck (z = 31.35)
+      makeBox(0.35, 1.9, 0.35, side * 8.62, 4.95, 31.45, matWhiteSteel, { solid: true });
+      const winchDrum = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.45, 12), matDarkSteel);
+      winchDrum.rotation.x = Math.PI / 2;
+      winchDrum.position.set(side * 8.62, 5.2, 31.2);
+      shipGroup.add(winchDrum);
+      const controlBox = makeBox(0.28, 0.42, 0.24, side * 8.45, 5.05, 31.45, matSafetyYellow);
+      makeSign('GANGWAY 舷梯口', side * 8.41, 5.72, 31.45, side < 0 ? Math.PI / 2 : -Math.PI / 2);
+      makeLifebuoy(side * 8.74, 4.75, 29.0, side < 0 ? Math.PI / 2 : -Math.PI / 2);
+
+      // Dynamic Walkable Floors, Ramp & Guardrail Colliders (active only when deployed!)
+      const upperFloor = addFloor(platMinX, platMaxX, 29.5, 31.0, 4.0);
+      const ladderRamp = addRamp(ladMinX - 0.05, ladMaxX + 0.05, 22.8, 29.6, 'z', 0.7, 4.0);
+      const lowerFloor = addFloor(ladMinX - 0.1, ladMaxX + 0.1, 21.55, 22.95, 0.7);
+      const ladderCols = [
+        addCollider(side * 10.6 - 0.08, side * 10.6 + 0.08, 0.5, 5.3, 21.5, 31.1), // Outer rail
+        addCollider(side * 9.45 - 0.08, side * 9.45 + 0.08, 0.5, 5.3, 21.5, 29.5), // Inner hull-side rail
+        addCollider(platMinX, platMaxX, 3.8, 5.3, 30.92, 31.12),                   // Upper aft rail
+        addCollider(ladMinX - 0.1, ladMaxX + 0.1, 0.5, 2.2, 21.45, 21.65)         // Lower forward rail
+      ];
+      upperFloor.active = false;
+      ladderRamp.active = false;
+      lowerFloor.active = false;
+      ladderCols.forEach(c => { c.active = false; });
+
+      const ladderState = {
+        side,
+        deployed: false,
+        curT: 0,
+        targetT: 0,
+        deployAngle,
+        ladderPivot,
+        lowerPlatPivot,
+        gatePivot,
+        safetyNet,
+        gateCol,
+        upperFloor,
+        ladderRamp,
+        lowerFloor,
+        ladderCols
+      };
+      animatedLadders.push(ladderState);
+
+      interactables.push({
+        mesh: controlBox,
+        getLabel: () => ladderState.deployed ? `收起${sideLabel}舷梯 (Stow Gangway)` : `放下${sideLabel}舷梯 (Deploy Gangway)`,
+        action: () => {
+          if (ladderState.deployed) {
+            // Prevent stowing if player is currently standing on the ladder
+            if (Math.sign(player.pos.x) === side && Math.abs(player.pos.x) > 8.7 && player.pos.z > 21.2 && player.pos.z < 31.4) {
+              showToast('請先返回主甲板再收起舷梯！');
+              return;
+            }
+          }
+          ladderState.deployed = !ladderState.deployed;
+          ladderState.targetT = ladderState.deployed ? 1 : 0;
+          playClickSound(ladderState.deployed ? 340 : 220);
+          showToast(ladderState.deployed
+            ? `${sideLabel}舷梯已放下，可由舷梯口步下至水面平台`
+            : `${sideLabel}舷梯收起中（航行狀態）`);
+        },
+        maxDist: 3.6
+      });
+
+      // =========================================================
+      // B. PILOT BOARDING STATION (引水梯登船站 — SOLAS V/23) at z = 20.1..21.3
+      // =========================================================
+      // Twin Fixed Handhold Stanchions (SOLAS V/23)
+      [20.15, 21.25].forEach(sz => {
+        const st = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.35, 10), matWhiteSteel);
+        st.position.set(railX, 4.68, sz);
+        shipGroup.add(st);
+      });
+      // Safety Chain across Pilot Gate (solid collider prevents accidental fall)
+      const pChain = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 1.15), matSafetyYellow);
+      pChain.position.set(railX, 4.95, 20.7);
+      shipGroup.add(pChain);
+      addCollider(railX - 0.1, railX + 0.1, 4.0, 5.3, 20.1, 21.3);
+
+      // Hull "PILOT" Boarding Mark painted on navy hull side
+      const pMark = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.1), matPilotMark);
+      pMark.position.set(side * 9.42, 2.55, 20.7);
+      pMark.rotation.y = side < 0 ? -Math.PI / 2 : Math.PI / 2;
+      shipGroup.add(pMark);
+
+      makeSign('PILOT 引水梯', side * 8.72, 5.45, 21.45, side < 0 ? Math.PI / 2 : -Math.PI / 2, '#1b4332', '#ffffff');
+      makeLifebuoy(side * 8.74, 4.75, 19.65, side < 0 ? Math.PI / 2 : -Math.PI / 2);
+
+      // Hanging Pilot Ladder Group (visible when rigged)
+      const hangingPilotLadder = new THREE.Group();
+      hangingPilotLadder.position.set(side * 9.48, 4.0, 20.7);
+      // Twin manila side ropes from y=4.0 down to y=0.45 (length 3.55m)
+      [-0.24, 0.24].forEach(rz => {
+        const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 3.65, 8), matRope);
+        rope.position.set(0, -1.8, rz);
+        hangingPilotLadder.add(rope);
+      });
+      // 11 Steps: top 7 hardwood, 1 long anti-twist Spreader (1.8m wide!), bottom 3 black rubber steps
+      for (let i = 0; i < 11; i++) {
+        const sy = -0.32 - i * 0.31;
+        const isSpreader = (i === 5);
+        const isRubber = (i >= 8);
+        const stepZLen = isSpreader ? 1.8 : 0.52;
+        const stepMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(0.11, 0.032, stepZLen),
+          isRubber ? matRubber : matWood
+        );
+        stepMesh.position.set(0, sy, 0);
+        hangingPilotLadder.add(stepMesh);
+      }
+      shipGroup.add(hangingPilotLadder);
+
+      // Stowed Pilot Ladder Reel on Main Deck (visible when stowed, also acts as interactable trigger)
+      const pilotReel = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.65, 12), matRope);
+      pilotReel.rotation.x = Math.PI / 2;
+      pilotReel.position.set(side * 8.42, 4.28, 20.7);
+      shipGroup.add(pilotReel);
+
+      // Port Pilot Ladder starts rigged (approaching port); Starboard starts stowed
+      let pilotRigged = (side < 0);
+      hangingPilotLadder.visible = pilotRigged;
+      pilotReel.scale.set(pilotRigged ? 0.55 : 1.0, 1.0, pilotRigged ? 0.55 : 1.0);
+
+      interactables.push({
+        mesh: pilotReel,
+        getLabel: () => pilotRigged ? `收捲${sideLabel}引水軟梯 (Stow Pilot Ladder)` : `垂放${sideLabel}引水軟梯 (Rig Pilot Ladder)`,
+        action: () => {
+          pilotRigged = !pilotRigged;
+          hangingPilotLadder.visible = pilotRigged;
+          pilotReel.scale.set(pilotRigged ? 0.55 : 1.0, 1.0, pilotRigged ? 0.55 : 1.0);
+          playClickSound(pilotRigged ? 360 : 240);
+          showToast(pilotRigged ? `${sideLabel}引水梯已垂放至水面` : `${sideLabel}引水梯已收捲至甲板`);
+        },
+        maxDist: 3.4
+      });
+    });
+  }
+
   // Build All Ship Sections
   buildHull();
+  buildBoardingSystems();
   buildForecastle();
   buildCargoArea();
   buildEngineRoom();
@@ -2590,7 +3351,7 @@
 
     if (e.code === 'KeyF') {
       player.flashlightOn = !player.flashlightOn;
-      flashlight.intensity = player.flashlightOn ? 2.8 : 0;
+      flashlight.intensity = player.flashlightOn ? 3.8 : 0;
       playClickSound(player.flashlightOn ? 440 : 300);
       showToast(player.flashlightOn ? '手電筒：開啟' : '手電筒：關閉');
     } else if (e.code === 'KeyV') {
@@ -2622,6 +3383,7 @@
 
     for (let i = 0; i < floors.length; i++) {
       const f = floors[i];
+      if (f.active === false) continue;
       if (x >= f.minX - 0.12 && x <= f.maxX + 0.12 && z >= f.minZ - 0.12 && z <= f.maxZ + 0.12) {
         if (f.y <= curY + stepUpMax && f.y > bestY) {
           bestY = f.y;
@@ -2630,6 +3392,7 @@
     }
     for (let i = 0; i < ramps.length; i++) {
       const r = ramps[i];
+      if (r.active === false) continue;
       if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) {
         let t = r.axis === 'z'
           ? (z - r.minZ) / (r.maxZ - r.minZ)
@@ -2733,6 +3496,9 @@
       if (p.z > 35.0 && p.x > 2.3) return ['DECK B — CREW CABIN', '船員臥室 (Crew Cabin)'];
       return ['DECK B — ACCOMMODATION', '船員層走廊 (Officers\' Deck)'];
     }
+    if (Math.abs(p.x) > 8.85 && p.z > 21.0 && p.z < 31.5 && p.y < 5.0) {
+      return ['BOARDING — GANGWAY', p.x < 0 ? '左舷舷梯 (Port Accommodation Ladder)' : '右舷舷梯 (Stbd Accommodation Ladder)'];
+    }
     if (p.y >= 2.6) {
       if (p.z < -38.0 && p.y < 5.2) return ['BOW — BOSUN STORE', '船首水手長儲藏室 (Bosun\'s Store)'];
       if (p.z < -37) return ['FORECASTLE DECK', '船首樓甲板 (Forecastle)'];
@@ -2744,6 +3510,27 @@
       if (p.z > 35.0 && p.x < -2.2) return ['DECK A — RECREATION', '交誼廳與健身房 (Rec Room & Gym)'];
       if (p.z > 35.0 && p.x > 4.6) return ['DECK A — SANITARY', '洗衣間與衛浴 (Laundry & Washroom)'];
       return ['DECK A — ACCOMMODATION', '住艙主大廳 (Main Lobby)'];
+    }
+    if (p.y < -2.6) {
+      const wbtNum = p.z < -17.0 ? 1 : (p.z < 2.0 ? 2 : 3);
+      return [`DOUBLE BOTTOM — WBT NO.${wbtNum}`, `船底雙層壓載水艙 NO.${wbtNum} (密閉空間 / 請用手電筒)`];
+    }
+    if (p.y < 3.6 && Math.abs(p.x) > 5.95 && Math.abs(p.x) < 8.25 && p.z > -18.5 && p.z < 20.5) {
+      if (p.x > 5.95) {
+        return ['WING BALLAST TANK (STBD)', p.z < 1.0 ? '右舷前邊壓載水艙 WBT NO.2 (S)' : '右舷後邊壓載水艙 WBT NO.3 (S)'];
+      }
+      if (p.y > 0.85) {
+        return ['UPPER WING BALLAST TANK (PORT)', p.z < 1.0 ? '左舷前上邊壓載水艙 WBT NO.2 (P)' : '左舷後上邊壓載水艙 WBT NO.3 (P)'];
+      }
+    }
+    if (p.y < 3.6 && p.z > -33.2 && p.z < -18.8 && Math.abs(p.x) < 6.0) {
+      return ['CARGO HOLD #1 — TANK TOP', '一號貨艙底層 / 貨櫃導軌與檢修梯'];
+    }
+    if (p.y < 3.6 && p.z > -15.2 && p.z < -0.8 && Math.abs(p.x) < 6.0) {
+      return ['CARGO HOLD #2 — ENCLOSED', '二號密閉貨艙內部 (無照明 / 請用手電筒)'];
+    }
+    if (p.y < 3.6 && p.z > 3.8 && p.z < 18.2 && Math.abs(p.x) < 6.0) {
+      return ['CARGO HOLD #3 — ENCLOSED', '三號密閉貨艙內部 (無照明 / 請用手電筒)'];
     }
     if (p.y >= 0.2) {
       if (p.z > 42.0) return ['STERN — STEERING GEAR', '舵機艙 (Steering Gear Room)'];
@@ -2809,13 +3596,23 @@
     ctx.strokeStyle = '#4dd0e1';
     ctx.strokeRect(zToX(-1), yToY(10), zToX(-15) - zToX(-1), yToY(4.8) - yToY(10));
     ctx.strokeRect(zToX(18), yToY(12.5), zToX(4) - zToX(18), yToY(4.8) - yToY(12.5));
-    // Engine Room, Steering Gear, Pipe Tunnel & Bow Compartments in Profile View
+    // Engine Room, Steering Gear, Pipe Tunnel, Holds, Double-Bottom WBTs & Bow Compartments in Profile View
     ctx.strokeStyle = '#66bb6a';
     ctx.strokeRect(zToX(42), yToY(4), zToX(24) - zToX(42), yToY(-2) - yToY(4));
     ctx.strokeStyle = '#ffb74d';
     ctx.strokeRect(zToX(47.4), yToY(4), zToX(42) - zToX(47.4), yToY(1) - yToY(4)); // Steering Gear
     ctx.strokeStyle = '#ce93d8';
     ctx.strokeRect(zToX(24), yToY(0.75), zToX(-39.5) - zToX(24), yToY(-2) - yToY(0.75)); // Pipe Tunnel
+    // Closed Cargo Holds #2 & #3 below hatch covers
+    ctx.strokeStyle = 'rgba(77, 208, 225, 0.55)';
+    [[-33, -19], [-15, -1], [4, 18]].forEach(([z1, z2]) => {
+      ctx.strokeRect(zToX(z2), yToY(4), zToX(z1) - zToX(z2), yToY(-2) - yToY(4));
+    });
+    // Double-Bottom Water Ballast Tanks (WBT NO.1 / NO.2 / NO.3 at y = -3.85..-2.0)
+    ctx.strokeStyle = '#29b6f6';
+    [[-33, -19], [-15.5, -0.5], [4, 18]].forEach(([z1, z2]) => {
+      ctx.strokeRect(zToX(z2), yToY(-2), zToX(z1) - zToX(z2), yToY(-3.85) - yToY(-2));
+    });
     ctx.strokeStyle = '#90caf9';
     ctx.strokeRect(zToX(-38), yToY(6), zToX(-45.6) - zToX(-38), yToY(3.2) - yToY(6)); // Bosun Store
     ctx.strokeRect(zToX(-38), yToY(3.2), zToX(-45.6) - zToX(-38), yToY(-2) - yToY(3.2)); // Bow Thruster
@@ -2831,9 +3628,14 @@
     ctx.fillText('DECK A', zToX(39), yToY(5.2));
     ctx.fillText('DECK B', zToX(39), yToY(8.2));
     ctx.fillText('BRIDGE', zToX(39), yToY(11.2));
-    ctx.fillText('BAY 3', zToX(14), yToY(7.5));
-    ctx.fillText('BAY 2', zToX(-5), yToY(7.5));
+    ctx.fillText('HOLD 3', zToX(14), yToY(1.8));
+    ctx.fillText('HOLD 2', zToX(-5), yToY(1.8));
     ctx.fillText('HOLD 1', zToX(-23), yToY(1.8));
+    ctx.fillStyle = '#4fc3f7';
+    ctx.fillText('WBT3', zToX(14), yToY(-3.3));
+    ctx.fillText('WBT2', zToX(-5), yToY(-3.3));
+    ctx.fillText('WBT1', zToX(-23), yToY(-3.3));
+    ctx.fillStyle = '#9fd0f5';
     ctx.fillText('FORECASTLE', zToX(-40), yToY(7.2));
 
     // Player Marker on Profile
@@ -2865,11 +3667,28 @@
     ctx.strokeStyle = '#ffd54f';
     ctx.strokeRect(zToX(29.7), xToPlanY(-11.5), zToX(25.5) - zToX(29.7), xToPlanY(11.5) - xToPlanY(-11.5));
 
-    // Cargo Bays in Plan View
+    // Cargo Bays, Wing Ballast Tanks, Accommodation Ladders & Pilot Stations in Plan View
     ctx.strokeStyle = '#4dd0e1';
     [[-33, -19], [-15, -1], [4, 18]].forEach(([z1, z2]) => {
       ctx.strokeRect(zToX(z2), xToPlanY(-6.2), zToX(z1) - zToX(z2), xToPlanY(6.2) - xToPlanY(-6.2));
     });
+    // Wing Ballast Tanks (Port & Starboard)
+    ctx.strokeStyle = 'rgba(41, 182, 246, 0.75)';
+    ctx.setLineDash([4, 3]);
+    [[-18.2, -1.2], [3.8, 20.2]].forEach(([z1, z2]) => {
+      ctx.strokeRect(zToX(z2), xToPlanY(-8.2), zToX(z1) - zToX(z2), xToPlanY(-6.2) - xToPlanY(-8.2));
+      ctx.strokeRect(zToX(z2), xToPlanY(6.2), zToX(z1) - zToX(z2), xToPlanY(8.2) - xToPlanY(6.2));
+    });
+    ctx.setLineDash([]);
+    // Accommodation Ladders (Gangways) & Pilot Boarding Stations
+    ctx.strokeStyle = '#ffeb3b';
+    [-1, 1].forEach(s => {
+      ctx.strokeRect(zToX(31.0), xToPlanY(s > 0 ? 9.2 : -10.8), zToX(22.5) - zToX(31.0), xToPlanY(10.8) - xToPlanY(9.2));
+    });
+    ctx.fillStyle = '#ffeb3b';
+    ctx.font = '9px monospace';
+    ctx.fillText('GANGWAY', zToX(30.5), xToPlanY(-11.4));
+    ctx.fillText('PILOT', zToX(21.5), xToPlanY(-10.5));
 
     // Player Marker + Facing Arrow in Plan View
     const planX = zToX(player.pos.z), planY = xToPlanY(player.pos.x);
@@ -2948,7 +3767,9 @@
       }
     }
 
-    // Update Camera Transform
+    // Update Camera Transform (automatically crouch slightly inside low-headroom Double-Bottom Ballast Tank!)
+    const targetEyeH = player.pos.y < -2.6 ? 1.32 : 1.65;
+    player.eyeHeight += (targetEyeH - player.eyeHeight) * Math.min(1, dt * 8);
     camera.position.set(player.pos.x, player.pos.y + player.eyeHeight, player.pos.z);
     camera.rotation.order = 'YXZ';
     camera.rotation.y = player.yaw;
@@ -2962,11 +3783,22 @@
     sunLight.target.position.set(snapX, snapY, snapZ);
     sunLight.position.set(snapX + sunOffset.x, snapY + sunOffset.y, snapZ + sunOffset.z);
 
-    // Indoor / Below-Waterline Daylight Isolation & Subtle Eye Adaptation
+    // Indoor / Below-Waterline Daylight Isolation & True Pitch-Black Enclosed Space Mode
     let targetInterior = 0.0;
+    let isPitchBlackSpace = false;
     const px = player.pos.x, py = player.pos.y, pz = player.pos.z;
-    if (py < 3.5) {
-      targetInterior = 0.92; // Engine room, Steering gear, 62m Pipe tunnel, Bow thruster, Bosun's store
+    if (py < -2.6) {
+      isPitchBlackSpace = true; // All Double-Bottom Water Ballast Tanks (WBT NO.1 / NO.2 / NO.3)
+    } else if (py < 3.5 && Math.abs(px) < 8.6) {
+      if (pz > -33.2 && pz < -18.8 && Math.abs(px) < 6.0) {
+        targetInterior = 0.22; // Open-top Cargo Hold #1 receives natural sky daylight
+      } else if (((pz > -15.2 && pz < -0.8) || (pz > 3.8 && pz < 18.2)) && Math.abs(px) < 6.0) {
+        isPitchBlackSpace = true; // Closed Cargo Holds #2 & #3 (zero light, explore with [F] Flashlight!)
+      } else if (Math.abs(px) > 5.95 && Math.abs(px) < 8.25 && pz > -18.5 && pz < 20.5 && (px > 5.95 || py > 0.85)) {
+        isPitchBlackSpace = true; // All 4 Wing Ballast Tanks (Stbd full-depth & Port upper wing!)
+      } else {
+        targetInterior = 0.92; // Engine room, Steering gear, 62m Pipe tunnel, Bow thruster, Bosun's store
+      }
     } else if (py < 6.8) {
       if (pz > 24.0 && pz < 41.0 && Math.abs(px) < 7.2) targetInterior = 0.62; // Deck A accommodation
     } else if (py < 9.8) {
@@ -2975,17 +3807,43 @@
       if (pz >= 34.8 && pz < 40.6 && px < -3.7 && px > -6.7) targetInterior = 0.78; // SOLAS safety rooms
       else if (pz > 25.0 && pz < 34.8 && Math.abs(px) < 6.8) targetInterior = 0.22; // Wheelhouse panoramic windows
     }
-    curInteriorFactor += (targetInterior - curInteriorFactor) * Math.min(1, dt * 4.5);
-    hemiLight.intensity = baseHemiIntensity * (1.0 - curInteriorFactor * 0.82);
-    const belowWaterDarken = py < 3.5 ? 0.78 : 0.0;
-    sunLight.intensity = baseSunIntensity * (1.0 - curInteriorFactor * belowWaterDarken);
+    curInteriorFactor += ((isPitchBlackSpace ? 1.0 : targetInterior) - curInteriorFactor) * Math.min(1, dt * 5.0);
+    if (isPitchBlackSpace) {
+      if (scene.environment !== null) scene.environment = null; // Cut outdoor sky PMREM IBL for TRUE 100% darkness!
+      hemiLight.intensity = 0.0;
+      sunLight.intensity = 0.0;
+    } else {
+      if (envRT && scene.environment !== envRT.texture) scene.environment = envRT.texture;
+      hemiLight.intensity = baseHemiIntensity * (1.0 - curInteriorFactor * 0.82);
+      const belowWaterDarken = py < 3.5 ? 0.78 : 0.0;
+      sunLight.intensity = baseSunIntensity * (1.0 - curInteriorFactor * belowWaterDarken);
+    }
     renderer.toneMappingExposure = 0.88;
 
-    // 2. Animate Doors
+    // 2. Animate Doors & Accommodation Ladders
     for (let i = 0; i < animatedDoors.length; i++) {
       const d = animatedDoors[i];
       d.curAngle += (d.targetAngle - d.curAngle) * Math.min(1, dt * 8);
       d.pivot.rotation.y = d.curAngle;
+    }
+    for (let i = 0; i < animatedHatches.length; i++) {
+      const h = animatedHatches[i];
+      h.curAngle += (h.targetAngle - h.curAngle) * Math.min(1, dt * 7);
+      h.lidPivot.rotation.x = h.curAngle;
+    }
+    for (let i = 0; i < animatedLadders.length; i++) {
+      const L = animatedLadders[i];
+      L.curT += (L.targetT - L.curT) * Math.min(1, dt * 3.5);
+      L.ladderPivot.rotation.x = -L.deployAngle * L.curT;
+      L.lowerPlatPivot.rotation.x = L.deployAngle * L.curT;
+      L.gatePivot.rotation.y = L.side * (-Math.PI * 0.48) * L.curT;
+      const ready = L.curT > 0.92;
+      L.safetyNet.visible = L.curT > 0.35;
+      L.gateCol.active = !ready;
+      L.upperFloor.active = ready;
+      L.ladderRamp.active = ready;
+      L.lowerFloor.active = ready;
+      for (let j = 0; j < L.ladderCols.length; j++) L.ladderCols[j].active = ready;
     }
 
     // 3. Animate Ship Machinery, Radars, Telegraph, Helm & Ocean
