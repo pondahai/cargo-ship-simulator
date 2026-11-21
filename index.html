@@ -588,8 +588,8 @@
     map: texHullPlate, bumpMap: texHullBump, bumpScale: 0.025, roughnessMap: texHullRough, roughness: 0.78, metalness: 0.38
   });
   const matHullRed = new THREE.MeshStandardMaterial({ color: 0x8b2323, roughness: 0.7, metalness: 0.25 });
-  const matWhiteSteel = new THREE.MeshStandardMaterial({ color: 0xecf2f7, roughness: 0.45, metalness: 0.15 });
-  const matInteriorWall = new THREE.MeshStandardMaterial({ color: 0xe4e8ec, roughness: 0.6, metalness: 0.05 });
+  const matWhiteSteel = new THREE.MeshStandardMaterial({ color: 0xecf2f7, roughness: 0.48, metalness: 0.15, envMapIntensity: 0.55 });
+  const matInteriorWall = new THREE.MeshStandardMaterial({ color: 0xd8dee4, roughness: 0.72, metalness: 0.04, envMapIntensity: 0.22 });
   const matDeck = new THREE.MeshStandardMaterial({
     map: texDeckGreen, bumpMap: texDeckBump, bumpScale: 0.018, roughnessMap: texDeckRough, roughness: 0.92, metalness: 0.1
   });
@@ -602,11 +602,11 @@
   const matGrate = new THREE.MeshStandardMaterial({
     map: texSteelGrate, bumpMap: texGrateBump, bumpScale: 0.032, roughnessMap: texGrateRough, roughness: 0.72, metalness: 0.72
   });
-  const matInteriorFloor = new THREE.MeshStandardMaterial({ map: texInteriorFloor, roughness: 0.75 });
+  const matInteriorFloor = new THREE.MeshStandardMaterial({ map: texInteriorFloor, roughness: 0.78, envMapIntensity: 0.22 });
   const matBathroomTile = new THREE.MeshStandardMaterial({
-    map: texBathroomTile, bumpMap: texBathroomTileBump, bumpScale: 0.015, roughness: 0.32, metalness: 0.08
+    map: texBathroomTile, bumpMap: texBathroomTileBump, bumpScale: 0.015, roughness: 0.34, metalness: 0.08, envMapIntensity: 0.35
   });
-  const matCeramic = new THREE.MeshStandardMaterial({ color: 0xf7fafc, roughness: 0.16, metalness: 0.05 });
+  const matCeramic = new THREE.MeshStandardMaterial({ color: 0xf4f7fa, roughness: 0.18, metalness: 0.05, envMapIntensity: 0.45 });
   const matChrome = new THREE.MeshStandardMaterial({ color: 0xdce6ee, roughness: 0.12, metalness: 0.92 });
   const matMirror = new THREE.MeshStandardMaterial({ color: 0xcbe4f5, roughness: 0.04, metalness: 0.96 });
   const matFrostedGlass = new THREE.MeshPhysicalMaterial({
@@ -2979,7 +2979,7 @@
     hemiLight.intensity = baseHemiIntensity * (1.0 - curInteriorFactor * 0.82);
     const belowWaterDarken = py < 3.5 ? 0.78 : 0.0;
     sunLight.intensity = baseSunIntensity * (1.0 - curInteriorFactor * belowWaterDarken);
-    renderer.toneMappingExposure = 0.92 + curInteriorFactor * 0.14;
+    renderer.toneMappingExposure = 0.88;
 
     // 2. Animate Doors
     for (let i = 0; i < animatedDoors.length; i++) {
