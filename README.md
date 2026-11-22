@@ -1,6 +1,7 @@
 # 🚢 M.V. PACIFIC HORIZON — 單頁 3D 貨輪模擬器 (3D Cargo Ship Simulator)
 
-> **線上立即試玩（GitHub Pages）**：👉 **[https://pondahai.github.io/cargo-ship-simulator/](https://pondahai.github.io/cargo-ship-simulator/)**
+> **線上立即試玩（GitHub Pages）**：👉 **[https://pondahai.github.io/cargo-ship-simulator/](https://pondahai.github.io/cargo-ship-simulator/)**  
+> **完整開發筆記（座標規格／技術解法／除錯紀錄／Roadmap）**：📓 **[DEVLOG.md](DEVLOG.md)**
 
 一款以**單一網頁檔案（Single-Page HTML + Three.js）**打造的 3D 貨輪第一人稱探索模擬器。全船依據真實支線貨櫃輪（Feeder Container Ship / Damen Combi Freighter）的**總佈置圖（General Arrangement Plan, GA Plan）**與 SOLAS 國際公約配置建構，無需任何外部貼圖或建置步驟，打開瀏覽器即可從羅經甲板一路徒步探索到水線下 62 公尺管路通道與船首側推器室。
 
@@ -72,6 +73,9 @@
 8. **階段八：PBR 光影升級、駕駛台防雨旋窗與 3D 剖面／俯視建築視角**
    - 升級全船 PBR 材質光影、GPU 海面與天空、1:1 獨立船用衛浴與醫務室／船員房門。
    - 新增駕駛台**高速旋轉防雨視窗（Clear-View Screens）**、船長室裱框縱向剖面圖，並於駕駛台左右側壁掛設 **3D 側剖面圖（`?cutaway=1`）與 3D 俯視總佈置圖（`?planview=1`）**。
+9. **階段九：機艙控制室（ECR）即時六缸輪機儀表櫃與四階段效能優化**
+   - 於 ECR 左舷大鐵櫃安裝 **6 缸即時七段顯示器（排氣溫度／P-Max／缸套壁溫）** 與 **9 組指針錶盤**（附可互動車鐘測試鈕）。
+   - 完成四階段 WebGL 效能優化（6 盞動態光源池、靜態網格自動合併、智慧陰影剔除、預烘焙儀表底圖、`G` 鍵三段畫質切換與即時 FPS／Calls 監控）。詳細技術筆記見 **[DEVLOG.md](DEVLOG.md)**。
 
 ---
 
