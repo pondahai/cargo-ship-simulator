@@ -539,6 +539,376 @@
     radarTex.needsUpdate = true;
   }
 
+  // =========================================================================
+  // DYNAMIC ECR 6-CYLINDER DIESEL TELEMETRY & MAIN SWITCHBOARD PANEL (1536x768)
+  // =========================================================================
+  const ecrPanelCanvas = document.createElement('canvas');
+  ecrPanelCanvas.width = 1536;
+  ecrPanelCanvas.height = 768;
+  const ecrCtx = ecrPanelCanvas.getContext('2d');
+  const ecrPanelTex = new THREE.CanvasTexture(ecrPanelCanvas);
+  ecrPanelTex.encoding = THREE.sRGBEncoding;
+  ecrPanelTex.anisotropy = 8;
+
+  // Authentic 7-Segment LED Vector Renderer (with dim unlit ghost segments)
+  const SEG_MAP = {
+    '0': [1,1,1,1,1,1,0], '1': [0,1,1,0,0,0,0], '2': [1,1,0,1,1,0,1],
+    '3': [1,1,1,1,0,0,1], '4': [0,1,1,0,0,1,1], '5': [1,0,1,1,0,1,1],
+    '6': [1,0,1,1,1,1,1], '7': [1,1,1,0,0,0,0], '8': [1,1,1,1,1,1,1],
+    '9': [1,1,1,1,0,1,1], '-': [0,0,0,0,0,0,1], ' ': [0,0,0,0,0,0,0]
+  };
+  function draw7SegChar(ctx, ch, x, y, w, h, onColor, offColor) {
+    const t = Math.max(2, w * 0.17);
+    const half = h / 2;
+    const segs = SEG_MAP[ch] || SEG_MAP[' '];
+    const drawH = (sx, sy, sw, on) => {
+      ctx.fillStyle = on ? onColor : offColor;
+      ctx.beginPath();
+      ctx.moveTo(sx + t * 0.5, sy);
+      ctx.lineTo(sx + sw - t * 0.5, sy);
+      ctx.lineTo(sx + sw, sy + t * 0.5);
+      ctx.lineTo(sx + sw - t * 0.5, sy + t);
+      ctx.lineTo(sx + t * 0.5, sy + t);
+      ctx.lineTo(sx, sy + t * 0.5);
+      ctx.closePath();
+      ctx.fill();
+    };
+    const drawV = (sx, sy, sh, on) => {
+      ctx.fillStyle = on ? onColor : offColor;
+      ctx.beginPath();
+      ctx.moveTo(sx + t * 0.5, sy);
+      ctx.lineTo(sx + t, sy + t * 0.5);
+      ctx.lineTo(sx + t, sy + sh - t * 0.5);
+      ctx.lineTo(sx + t * 0.5, sy + sh);
+      ctx.lineTo(sx, sy + sh - t * 0.5);
+      ctx.lineTo(sx, sy + t * 0.5);
+      ctx.closePath();
+      ctx.fill();
+    };
+    const g = t * 0.35;
+    drawH(x + g, y, w - 2 * g, segs[0]);                       // A (top)
+    drawV(x + w - t, y + g, half - g, segs[1]);                // B (top-right)
+    drawV(x + w - t, y + half + g * 0.4, half - g, segs[2]);   // C (bot-right)
+    drawH(x + g, y + h - t, w - 2 * g, segs[3]);               // D (bottom)
+    drawV(x, y + half + g * 0.4, half - g, segs[4]);           // E (bot-left)
+    drawV(x, y + g, half - g, segs[5]);                        // F (top-left)
+    drawH(x + g, y + half - t * 0.5, w - 2 * g, segs[6]);      // G (middle)
+  }
+
+  function draw7SegDisplay(ctx, text, x, y, boxW, boxH, onColor, offColor = 'rgba(255,255,255,0.06)') {
+    ctx.fillStyle = '#070b0f';
+    ctx.fillRect(x, y, boxW, boxH);
+    ctx.strokeStyle = '#33414e';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, boxW, boxH);
+
+    const str = String(text);
+    const padX = 7, padY = 6;
+    const innerH = boxH - padY * 2;
+    const digitCount = str.replace(/\./g, '').length;
+    const gap = 5;
+    const digitW = Math.min(innerH * 0.56, (boxW - padX * 2 - gap * Math.max(0, digitCount - 1)) / Math.max(1, digitCount));
+    let cx = x + boxW - padX - (digitCount * digitW + Math.max(0, digitCount - 1) * gap);
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      if (ch === '.') {
+        ctx.fillStyle = onColor;
+        ctx.beginPath();
+        ctx.arc(cx - gap * 0.55, y + boxH - padY - 2, Math.max(2, digitW * 0.14), 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        draw7SegChar(ctx, ch, cx, y + padY, digitW, innerH, onColor, offColor);
+        cx += digitW + gap;
+      }
+    }
+  }
+
+  // Marine Analog Dial Gauge Renderer
+  function drawAnalogGauge(ctx, cx, cy, r, title, unit, value, minVal, maxVal, dangerStart = null, decimals = 0) {
+    // Metallic bezel
+    ctx.fillStyle = '#182028';
+    ctx.beginPath(); ctx.arc(cx, cy, r + 6, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#5c6b7a'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(cx, cy, r + 5, 0, Math.PI * 2); ctx.stroke();
+
+    // Vintage warm-white instrument dial face
+    const faceGrad = ctx.createRadialGradient(cx - r * 0.25, cy - r * 0.25, r * 0.1, cx, cy, r);
+    faceGrad.addColorStop(0, '#f8f6ee');
+    faceGrad.addColorStop(1, '#d9d5c5');
+    ctx.fillStyle = faceGrad;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+
+    const startA = Math.PI * 0.75;
+    const sweepA = Math.PI * 1.5;
+
+    // Danger zone red arc
+    if (dangerStart !== null) {
+      const dFrac = Math.max(0, Math.min(1, (dangerStart - minVal) / (maxVal - minVal)));
+      ctx.strokeStyle = '#d32f2f';
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r - 11, startA + dFrac * sweepA, startA + sweepA);
+      ctx.stroke();
+    }
+
+    // Major & minor ticks + scale numbers
+    const majorTicks = 6;
+    ctx.fillStyle = '#111820';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i <= majorTicks * 4; i++) {
+      const frac = i / (majorTicks * 4);
+      const a = startA + frac * sweepA;
+      const isMajor = (i % 4 === 0);
+      const rOut = r - 6;
+      const rIn = isMajor ? r - 18 : r - 12;
+      ctx.strokeStyle = (dangerStart !== null && minVal + frac * (maxVal - minVal) >= dangerStart) ? '#b71c1c' : '#1b242e';
+      ctx.lineWidth = isMajor ? 2.5 : 1.2;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * rIn, cy + Math.sin(a) * rIn);
+      ctx.lineTo(cx + Math.cos(a) * rOut, cy + Math.sin(a) * rOut);
+      ctx.stroke();
+      if (isMajor) {
+        const num = minVal + frac * (maxVal - minVal);
+        const rTxt = r - 30;
+        ctx.fillText(decimals > 0 ? num.toFixed(1) : Math.round(num), cx + Math.cos(a) * rTxt, cy + Math.sin(a) * rTxt);
+      }
+    }
+
+    // Gauge title & unit
+    ctx.fillStyle = '#1d2733';
+    ctx.font = 'bold 10px Arial, sans-serif';
+    ctx.fillText(title, cx, cy + r * 0.36);
+    ctx.fillStyle = '#4a5a6a';
+    ctx.font = 'bold 9.5px monospace';
+    ctx.fillText(unit, cx, cy + r * 0.56);
+
+    // Animated Red Needle
+    const clamped = Math.max(minVal, Math.min(maxVal, value));
+    const nAngle = startA + ((clamped - minVal) / (maxVal - minVal)) * sweepA;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(nAngle);
+    ctx.fillStyle = '#d50000';
+    ctx.beginPath();
+    ctx.moveTo(-14, -3.2);
+    ctx.lineTo(r - 14, -1.2);
+    ctx.lineTo(r - 14, 1.2);
+    ctx.lineTo(-14, 3.2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Center cap
+    ctx.fillStyle = '#222b34';
+    ctx.beginPath(); ctx.arc(cx, cy, 7.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#788896';
+    ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Live Main Engine Telemetry State (smoothly follows bridge/ECR telegraph!)
+  const engSim = {
+    rpm: 82, tcRpm: 11.4, scavPress: 2.1, loPress: 3.8, cwTemp: 79, hfoPress: 7.4,
+    powerKw: 2950, fuelKgh: 540, genKw: 265,
+    cylBias: [-4.2, +2.8, -1.5, +5.1, -2.6, +1.9] // Realistic individual cylinder thermal signatures
+  };
+  let ecrPanelTimer = 99;
+
+  function updateEcrPanel(t, dt, force = false) {
+    // Target telemetry from current Telegraph / Ship Speed
+    const speedAbs = Math.abs(typeof currentKnots !== 'undefined' ? currentKnots : 12.0);
+    const loadFrac = Math.min(1, speedAbs / 18.5);
+    const running = (typeof TELEGRAPH_MODES !== 'undefined') ? (TELEGRAPH_MODES[telegraphIdx].name !== 'STOP') : true;
+
+    const targetRpm = running ? Math.max(24, speedAbs * 6.45) : 0;
+    const targetTc = running ? (2.2 + loadFrac * 13.8) : 0;
+    const targetScav = running ? (0.35 + loadFrac * 2.95) : 0.05;
+    const targetLo = running ? (3.4 + loadFrac * 0.9) : 1.1; // Standby electric LO pump keeps ~1.1 bar
+    const targetCw = running ? (68 + loadFrac * 16.5) : 54;
+    const targetHfo = running ? (6.4 + loadFrac * 2.1) : 2.2;
+    const targetPower = running ? Math.round(320 + Math.pow(loadFrac, 2.3) * 5160) : 0;
+    const targetFuel = running ? Math.round(65 + Math.pow(loadFrac, 2.1) * 890) : 12;
+    const targetGenKw = 215 + loadFrac * 145;
+
+    const k = force ? 1 : Math.min(1, dt * 2.2);
+    engSim.rpm += (targetRpm - engSim.rpm) * k;
+    engSim.tcRpm += (targetTc - engSim.tcRpm) * k;
+    engSim.scavPress += (targetScav - engSim.scavPress) * k;
+    engSim.loPress += (targetLo - engSim.loPress) * k;
+    engSim.cwTemp += (targetCw - engSim.cwTemp) * k;
+    engSim.hfoPress += (targetHfo - engSim.hfoPress) * k;
+    engSim.powerKw += (targetPower - engSim.powerKw) * k;
+    engSim.fuelKgh += (targetFuel - engSim.fuelKgh) * k;
+    engSim.genKw += (targetGenKw - engSim.genKw) * k;
+
+    ecrPanelTimer += dt;
+    if (!force && ecrPanelTimer < 0.075) return;
+    ecrPanelTimer = 0;
+
+    const ctx = ecrCtx, W = 1536, H = 768;
+    // Industrial dark slate steel cabinet face
+    ctx.fillStyle = '#1f2830';
+    ctx.fillRect(0, 0, W, H);
+
+    // 3 Panel Section Dividers & Riveted Borders
+    const drawSectionBox = (x, y, w, h, title) => {
+      ctx.fillStyle = '#25303a';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = '#475868';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x, y, w, h);
+      ctx.fillStyle = '#121920';
+      ctx.fillRect(x + 2, y + 2, w - 4, 40);
+      ctx.fillStyle = '#8ad0ff';
+      ctx.font = 'bold 17px monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(title, x + 16, y + 23);
+    };
+
+    drawSectionBox(14, 14, 496, 740, 'MAIN ENGINE ANALOG GAUGES  主機指針錶盤');
+    drawSectionBox(524, 14, 558, 740, '6S42MC 6-CYLINDER MONITOR  六缸七段顯示器');
+    drawSectionBox(1096, 14, 426, 740, 'MAIN SWITCHBOARD 440V/60Hz  主配電盤');
+
+    const j = Math.sin(t * 7.3) * 0.4 + Math.cos(t * 11.1) * 0.25;
+
+    // --- PANEL 1: 6 MAIN ENGINE ANALOG DIAL GAUGES ---
+    drawAnalogGauge(ctx, 138, 175, 86, 'MAIN RPM', 'RPM', engSim.rpm + (running ? j : 0), 0, 140, 120, 0);
+    drawAnalogGauge(ctx, 382, 175, 86, 'TURBO RPM', 'x1000 RPM', engSim.tcRpm + (running ? j * 0.12 : 0), 0, 18, 15.5, 1);
+    drawAnalogGauge(ctx, 138, 395, 86, 'SCAV AIR', 'bar', engSim.scavPress + (running ? j * 0.04 : 0), 0, 4.0, 3.4, 1);
+    drawAnalogGauge(ctx, 382, 395, 86, 'LUBE OIL', 'bar', engSim.loPress + j * 0.03, 0, 6.0, 5.2, 1);
+    drawAnalogGauge(ctx, 138, 615, 86, 'JACKET CW', '°C', engSim.cwTemp + j * 0.2, 40, 100, 88, 0);
+    drawAnalogGauge(ctx, 382, 615, 86, 'HFO FUEL', 'bar', engSim.hfoPress + j * 0.05, 0, 10.0, 9.0, 1);
+
+    // --- PANEL 2: 6-CYLINDER 7-SEGMENT LED TELEMETRY ---
+    const modeName = (typeof TELEGRAPH_MODES !== 'undefined') ? TELEGRAPH_MODES[telegraphIdx].name : 'HALF AHEAD';
+    // Status banner
+    ctx.fillStyle = running ? '#0d3b26' : '#3d1a1a';
+    ctx.fillRect(542, 64, 522, 38);
+    ctx.strokeStyle = running ? '#00e676' : '#ff5252';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(542, 64, 522, 38);
+    ctx.fillStyle = running ? '#69f0ae' : '#ff8a80';
+    ctx.font = 'bold 17px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(`ORDER: ${modeName}`, 558, 84);
+    ctx.textAlign = 'right';
+    ctx.fillText(running ? '● ENGINE RUNNING' : '● ENGINE STOPPED', 1048, 84);
+
+    // Column Headers for 6 Cylinders
+    ctx.fillStyle = '#a8c0d4';
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('CYL', 572, 124);
+    ctx.fillText('EXH. TEMP (°C)', 678, 124);
+    ctx.fillText('P-MAX (bar)', 818, 124);
+    ctx.fillText('LINER (°C)', 950, 124);
+    ctx.fillText('LOAD', 1038, 124);
+
+    const baseExh = running ? (230 + loadFrac * 195) : 92;
+    const basePmax = running ? (62 + loadFrac * 88) : 0;
+    const baseLiner = running ? (142 + loadFrac * 62) : 64;
+
+    for (let c = 0; c < 6; c++) {
+      const ry = 140 + c * 74;
+      const jitter = Math.sin(t * (3.1 + c * 0.7) + c * 1.9) * 1.6;
+      const exh = Math.round(baseExh + engSim.cylBias[c] * (0.4 + loadFrac) + (running ? jitter : 0));
+      const pmax = Math.max(0, basePmax + engSim.cylBias[c] * 0.45 + (running ? jitter * 0.35 : 0));
+      const liner = Math.round(baseLiner + engSim.cylBias[c] * 0.35 + (running ? jitter * 0.4 : 0));
+
+      // Row backing
+      ctx.fillStyle = (c % 2 === 0) ? '#1b242d' : '#1f2933';
+      ctx.fillRect(540, ry, 526, 64);
+
+      // Cylinder number badge
+      ctx.fillStyle = '#0e161e';
+      ctx.fillRect(548, ry + 10, 48, 44);
+      ctx.strokeStyle = '#4e6375';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(548, ry + 10, 48, 44);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 20px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`#${c + 1}`, 572, ry + 33);
+
+      // 3 Glowing 7-Segment Displays per cylinder
+      const exhColor = exh > 410 ? '#ff3d00' : '#ff6e40';
+      draw7SegDisplay(ctx, String(exh).padStart(3, ' '), 610, ry + 9, 132, 46, exhColor, 'rgba(255,80,40,0.09)');
+      draw7SegDisplay(ctx, pmax.toFixed(1).padStart(5, ' '), 754, ry + 9, 128, 46, '#ffd740', 'rgba(255,215,64,0.08)');
+      draw7SegDisplay(ctx, String(liner).padStart(3, ' '), 894, ry + 9, 110, 46, '#00e676', 'rgba(0,230,118,0.08)');
+
+      // Mini vertical exhaust thermal bar
+      const barFrac = Math.max(0.05, Math.min(1, (exh - 60) / 400));
+      ctx.fillStyle = '#0a1016';
+      ctx.fillRect(1018, ry + 10, 36, 44);
+      ctx.fillStyle = exh > 410 ? '#ff3d00' : (exh > 340 ? '#ffab00' : '#00e676');
+      ctx.fillRect(1020, ry + 10 + 44 * (1 - barFrac), 32, 44 * barFrac);
+    }
+
+    // Bottom Large 7-Segment Summary Totals (SHAFT RPM | POWER kW | FUEL kg/h)
+    const sumY = 602;
+    ctx.fillStyle = '#9fc2dc';
+    ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('SHAFT RPM', 626, sumY + 12);
+    ctx.fillText('SHAFT POWER (kW)', 803, sumY + 12);
+    ctx.fillText('HFO FLOW (kg/h)', 980, sumY + 12);
+
+    draw7SegDisplay(ctx, engSim.rpm.toFixed(1).padStart(5, ' '), 544, sumY + 24, 164, 62, '#ff5252', 'rgba(255,82,82,0.09)');
+    draw7SegDisplay(ctx, String(Math.round(engSim.powerKw)).padStart(4, ' '), 722, sumY + 24, 164, 62, '#00e676', 'rgba(0,230,118,0.09)');
+    draw7SegDisplay(ctx, String(Math.round(engSim.fuelKgh)).padStart(4, ' '), 900, sumY + 24, 164, 62, '#ffca28', 'rgba(255,202,40,0.09)');
+
+    // Interactive hint on bottom center
+    ctx.fillStyle = '#ffd54f';
+    ctx.font = 'bold 13px "Microsoft JhengHei", monospace';
+    ctx.fillText('▲ 按 [E] 紅色測試鈕可即時切換主機檔位觀察六缸數據變化 ▲', 803, 725);
+
+    // --- PANEL 3: MAIN SWITCHBOARD 440V / 60Hz ---
+    drawAnalogGauge(ctx, 1210, 168, 76, 'BUS VOLT', 'VOLTS', 440 + Math.sin(t * 2.1) * 1.8, 0, 500, 470, 0);
+    drawAnalogGauge(ctx, 1408, 168, 76, 'FREQUENCY', 'Hz', 60.0 + Math.cos(t * 1.7) * 0.12, 55, 65, 63, 1);
+    drawAnalogGauge(ctx, 1309, 345, 78, 'GEN #1 LOAD', 'kW', engSim.genKw + j * 1.4, 0, 600, 510, 0);
+
+    // Generator Breaker Status LEDs
+    const leds = [
+      { label: 'DG #1 BREAKER CLOSED', on: true, col: '#00e676' },
+      { label: 'DG #2 AUTO STANDBY', on: true, col: '#29b6f6' },
+      { label: 'EMERG. GEN READY', on: true, col: '#ffca28' },
+      { label: 'SHORE POWER ISOLATED', on: false, col: '#ff5252' }
+    ];
+    leds.forEach((ld, idx) => {
+      const ly = 458 + idx * 34;
+      ctx.fillStyle = '#141c24';
+      ctx.fillRect(1118, ly, 382, 26);
+      ctx.fillStyle = ld.on ? ld.col : '#3a2222';
+      ctx.beginPath(); ctx.arc(1136, ly + 13, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#dce8f2';
+      ctx.font = 'bold 13px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(ld.label, 1154, ly + 14);
+    });
+
+    // Alarm Annunciator Grid (8 Backlit Tiles)
+    const alarms = ['LO PRESS LOW', 'EXH TEMP HI', 'OVERSPEED', 'CW TEMP HI', 'BILGE HIGH', 'FIRE ALARM', 'MIST DET.', 'SYS NORMAL'];
+    for (let i = 0; i < 8; i++) {
+      const col = i % 2, row = Math.floor(i / 2);
+      const ax = 1118 + col * 194, ay = 602 + row * 34;
+      const isNormalTile = (i === 7);
+      const isHighExh = (i === 1 && baseExh > 405);
+      ctx.fillStyle = isNormalTile ? '#104a2b' : (isHighExh ? '#8c2d00' : '#182028');
+      ctx.fillRect(ax, ay, 186, 28);
+      ctx.strokeStyle = isNormalTile ? '#00e676' : (isHighExh ? '#ffab00' : '#3a4a58');
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(ax, ay, 186, 28);
+      ctx.fillStyle = isNormalTile ? '#69f0ae' : (isHighExh ? '#ffe082' : '#5e7080');
+      ctx.font = 'bold 12px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(alarms[i], ax + 93, ay + 15);
+    }
+
+    ecrPanelTex.needsUpdate = true;
+  }
+
   // ECDIS Electronic Chart Texture
   const ecdisTex = makeCanvasTexture(256, 256, (ctx, w, h) => {
     ctx.fillStyle = '#0d2b45';
@@ -1790,8 +2160,36 @@
       scr.rotation.x = -0.35;
       shipGroup.add(scr);
     }
-    // Main Electrical Switchboard along Port wall
+    // Main Electrical Switchboard & 6-Cylinder Diesel Telemetry Cabinet along Port wall
     makeBox(0.7, 2.2, 4.6, -6.7, 2.1, 38.6, matDarkSteel, { solid: true });
+    // Live 1536x768 Engine Telemetry & Switchboard Panel (6-Cylinder 7-Segment LEDs + 9 Analog Dial Gauges)
+    const ecrPanelMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(4.48, 2.08),
+      new THREE.MeshBasicMaterial({ map: ecrPanelTex })
+    );
+    ecrPanelMesh.position.set(-6.34, 2.1, 38.6);
+    ecrPanelMesh.rotation.y = Math.PI / 2;
+    shipGroup.add(ecrPanelMesh);
+
+    // Interactive ECR Local Telegraph Control Button right on the bottom console lip (zero overlap with 7-seg displays!)
+    const ecrBtn = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.055, 0.065, 0.07, 14),
+      new THREE.MeshStandardMaterial({ color: 0xff3d00, emissive: 0x551100, roughness: 0.3 })
+    );
+    ecrBtn.rotation.z = -Math.PI / 2;
+    ecrBtn.position.set(-6.32, 1.14, 38.6);
+    shipGroup.add(ecrBtn);
+    interactables.push({
+      mesh: ecrBtn,
+      getLabel: () => `機艙切換主機負荷 / 車鐘檔位 (目前: ${TELEGRAPH_MODES[telegraphIdx].name})`,
+      action: () => {
+        telegraphIdx = (telegraphIdx + 1) % TELEGRAPH_MODES.length;
+        const m = TELEGRAPH_MODES[telegraphIdx];
+        showToast(`機艙車鐘指令：${m.name} (${m.knots.toFixed(1)} 節)`);
+        playBellSound();
+      },
+      maxDist: 3.8
+    });
 
     // Staircase DOWN from Deck A (y=4.0, z=35.0) to ECR (y=1.0, z=40.0) at x = -1.1
     makeStaircaseZ(-1.1, 1.7, 35.0, 4.0, 40.0, 1.0);
@@ -4158,8 +4556,9 @@
       engineOsc.frequency.setTargetAtTime(28 + Math.abs(currentKnots) * 1.5, audioCtx.currentTime, 0.15);
     }
 
-    // Update Radar Display & HUD
+    // Update Radar Display, ECR Live 6-Cylinder Telemetry Cabinet & HUD
     updateRadarTexture(elapsed);
+    updateEcrPanel(elapsed, dt);
     updateInteractionCheck();
 
     hudTimer += dt;

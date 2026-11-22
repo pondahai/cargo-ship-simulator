@@ -137,9 +137,10 @@
 雙組錨機、錨鏈、前桅與海平面視野。
 ![船首甲板](screenshots/12-forecastle-bow.png)
 
-### 12. 主機艙底層（Main Engine Room）
-6 缸二衝程主柴油機、連動車鐘轉速的飛輪、傳動軸與色碼管路。
+### 12. 主機艙底層（Main Engine Room）與機艙控制室即時六缸儀表櫃（ECR）
+6 缸二衝程主柴油機、連動車鐘轉速的飛輪、傳動軸與色碼管路；機艙控制室（ECR）左舷主鐵櫃配備 **6 缸即時發光七段顯示器（排氣溫度／最高爆發壓力 P-Max／缸套壁溫）** 與 **9 組即時動態指針錶盤**，皆隨車鐘檔位即時連動。
 ![主機艙底層](screenshots/13-engine-room.png)
+![機艙控制室即時六缸儀表櫃](screenshots/21-ecr-telemetry-cabinet.png)
 
 ### 13. 船尾舵機艙（Steering Gear Room）
 四缸液壓舵機、舵柱（隨駕駛台轉舵即時連動）與雙組液壓泵。
