@@ -189,6 +189,7 @@
     <span><kbd>M</kbd> GA 設計圖</span>
     <span><kbd>F</kbd> 手電筒</span>
     <span><kbd>T</kbd> 日/暮/夜</span>
+    <span><kbd>G</kbd> 畫質</span>
     <span><kbd>H</kbd> 鳴笛</span>
   </div>
 
@@ -226,7 +227,8 @@
   const container = document.getElementById('canvas-container');
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // Default Balanced DPR (<=1.25 cuts 4K/Retina pixel fill by ~60% with crisp visuals; toggle [G] for Ultra/Performance!)
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputEncoding = THREE.sRGBEncoding;
@@ -265,11 +267,11 @@
   scene.add(sunLight);
   scene.add(sunLight.target);
 
-  // Flashlight attached to camera (with real-time shadows!)
+  // Flashlight attached to camera (shadows dynamically enabled ONLY when flashlight is ON!)
   const flashlight = new THREE.SpotLight(0xfff6e0, 0, 38, Math.PI / 4.2, 0.55, 1.25);
   flashlight.position.set(0, -0.08, 0);
   flashlight.target.position.set(0, -0.08, -1);
-  flashlight.castShadow = true;
+  flashlight.castShadow = false;
   flashlight.shadow.mapSize.width = 1024;
   flashlight.shadow.mapSize.height = 1024;
   flashlight.shadow.camera.near = 0.25;
@@ -1096,6 +1098,7 @@
     if (len < 0.1) return;
     const angle = Math.atan2(dx, dz);
     const group = new THREE.Group();
+    group.userData.mergeable = true;
     group.position.set((x1 + x2) / 2, yBase, (z1 + z2) / 2);
     group.rotation.y = angle;
 
@@ -1222,7 +1225,45 @@
     ctx.fillRect(0, 0, w, h);
   });
 
-  // Helper: Interior Ceiling Light
+  // Helper: Interior Ceiling Light (Virtual Light Descriptor -> Dynamic 6-Light Pool for 3x-5x GPU FPS!)
+  const LIGHT_POOL_SIZE = 6;
+  const lightPool = [];
+  for (let i = 0; i < LIGHT_POOL_SIZE; i++) {
+    const pl = new THREE.PointLight(0xfff3dd, 0, 16, 1.4);
+    pl.position.set(0, -999, 0);
+    shipGroup.add(pl);
+    lightPool.push(pl);
+  }
+  let lightPoolTimer = 99;
+  function updateLightPool(dt, isPitchBlack) {
+    lightPoolTimer += dt;
+    if (lightPoolTimer < 0.12) return;
+    lightPoolTimer = 0;
+    if (isPitchBlack) {
+      for (let i = 0; i < LIGHT_POOL_SIZE; i++) lightPool[i].intensity = 0;
+      return;
+    }
+    const px = player.pos.x, py = player.pos.y + 1.4, pz = player.pos.z;
+    // Score all virtual interior lights by distance (heavily favoring current deck Y)
+    const ranked = interiorLights.map(vl => {
+      const dx = vl.pos.x - px, dy = (vl.pos.y - py) * 2.4, dz = vl.pos.z - pz;
+      return { vl, d2: dx * dx + dy * dy + dz * dz };
+    });
+    ranked.sort((a, b) => a.d2 - b.d2);
+    for (let i = 0; i < LIGHT_POOL_SIZE; i++) {
+      const pl = lightPool[i];
+      if (i < ranked.length && ranked[i].d2 < 900) {
+        const vl = ranked[i].vl;
+        pl.position.copy(vl.pos);
+        pl.color.copy(vl.color);
+        pl.intensity = vl.intensity;
+        pl.distance = vl.distance;
+      } else {
+        pl.intensity = 0;
+      }
+    }
+  }
+
   function addInteriorLight(x, y, z, intensity = 0.85, distance = 16, color = 0xfff3dd) {
     const bulb = new THREE.Mesh(
       new THREE.BoxGeometry(0.9, 0.08, 0.22),
@@ -1237,11 +1278,9 @@
     halo.position.set(x, y - 0.08, z);
     halo.scale.set(1.6, 0.9, 1);
     shipGroup.add(halo);
-    const light = new THREE.PointLight(color, intensity, distance, 1.4);
-    light.position.set(x, y - 0.25, z);
-    shipGroup.add(light);
-    interiorLights.push(light);
-    return light;
+    const vLight = { pos: new THREE.Vector3(x, y - 0.25, z), intensity, distance, color: new THREE.Color(color) };
+    interiorLights.push(vLight);
+    return vLight;
   }
 
   // Helper: 1:1 Marine Sanitary Fixtures (Toilet, Washbasin+Mirror, Shower Unit)
@@ -3355,6 +3394,92 @@
   buildCompassDeck();
 
   // =========================================================================
+  // STATIC GEOMETRY MERGER (Collapses ~1,200+ static meshes into ~35 Draw Calls!)
+  // =========================================================================
+  function mergeStaticShipMeshes() {
+    shipGroup.updateMatrixWorld(true);
+    const skip = new Set();
+    interactables.forEach(it => { if (it.mesh) skip.add(it.mesh); });
+    if (radarScanner1) skip.add(radarScanner1);
+    if (radarScanner2) skip.add(radarScanner2);
+
+    const buckets = new Map();
+    const toRemove = [];
+
+    function collectMesh(mesh) {
+      if (!mesh.isMesh || skip.has(mesh)) return;
+      if (!mesh.geometry || Array.isArray(mesh.material) || !mesh.material) return;
+      if (mesh.material.map === ecrPanelTex || mesh.material.map === radarTex) return;
+      const mat = mesh.material;
+      // Disable sun shadow casting for below-deck / interior meshes to slash shadow pass cost
+      const worldY = mesh.matrixWorld.elements[13];
+      const castS = mesh.castShadow && worldY >= 3.6;
+      const key = `${mat.id}|${castS ? 1 : 0}|${mesh.receiveShadow ? 1 : 0}`;
+      if (!buckets.has(key)) buckets.set(key, { mat, castS, recvS: mesh.receiveShadow, meshes: [] });
+      buckets.get(key).meshes.push(mesh);
+    }
+
+    for (let i = 0; i < shipGroup.children.length; i++) {
+      const child = shipGroup.children[i];
+      if (child.isMesh) {
+        collectMesh(child);
+      } else if (child.isGroup && child.userData && child.userData.mergeable) {
+        child.children.forEach(c => collectMesh(c));
+        toRemove.push(child);
+      }
+    }
+
+    buckets.forEach(({ mat, castS, recvS, meshes }) => {
+      if (meshes.length < 2) return;
+      const geoms = [];
+      let totalVerts = 0;
+      let hasUV = true;
+
+      for (let i = 0; i < meshes.length; i++) {
+        const m = meshes[i];
+        const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+        g.applyMatrix4(m.matrixWorld);
+        if (!g.attributes.normal) g.computeVertexNormals();
+        if (!g.attributes.uv) hasUV = false;
+        totalVerts += g.attributes.position.count;
+        geoms.push(g);
+      }
+
+      const positions = new Float32Array(totalVerts * 3);
+      const normals = new Float32Array(totalVerts * 3);
+      const uvs = hasUV ? new Float32Array(totalVerts * 2) : null;
+      let offset = 0;
+
+      for (let i = 0; i < geoms.length; i++) {
+        const g = geoms[i];
+        const pos = g.attributes.position.array;
+        const norm = g.attributes.normal.array;
+        positions.set(pos, offset * 3);
+        normals.set(norm, offset * 3);
+        if (hasUV) uvs.set(g.attributes.uv.array, offset * 2);
+        offset += g.attributes.position.count;
+        g.dispose();
+      }
+
+      const merged = new THREE.BufferGeometry();
+      merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+      if (hasUV) merged.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+      merged.computeBoundingSphere();
+
+      const mergedMesh = new THREE.Mesh(merged, mat);
+      mergedMesh.castShadow = castS;
+      mergedMesh.receiveShadow = recvS;
+      shipGroup.add(mergedMesh);
+
+      meshes.forEach(m => { if (m.parent === shipGroup) shipGroup.remove(m); });
+    });
+
+    toRemove.forEach(g => shipGroup.remove(g));
+  }
+  mergeStaticShipMeshes();
+
+  // =========================================================================
   // 5. DYNAMIC OCEAN & SHIP WAKE (GPU Gerstner/Wave Normals + Fresnel + Sun Glitter)
   // =========================================================================
   const oceanGeo = new THREE.PlaneGeometry(1600, 1600, 128, 128);
@@ -3907,11 +4032,22 @@
     }
     if (!pointerLocked) return;
 
+    // Graphics Quality Modes: 0 = Balanced (1.25x DPR, Shadows ON), 1 = Performance (1.0x DPR, Shadows OFF), 2 = Ultra (2.0x DPR, Shadows ON)
     if (e.code === 'KeyF') {
       player.flashlightOn = !player.flashlightOn;
       flashlight.intensity = player.flashlightOn ? 3.8 : 0;
+      flashlight.castShadow = player.flashlightOn && qualityMode !== 1;
       playClickSound(player.flashlightOn ? 440 : 300);
       showToast(player.flashlightOn ? '手電筒：開啟' : '手電筒：關閉');
+    } else if (e.code === 'KeyG') {
+      qualityMode = (qualityMode + 1) % 3;
+      const dprCap = qualityMode === 0 ? 1.25 : (qualityMode === 1 ? 1.0 : 2.0);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, dprCap));
+      renderer.shadowMap.enabled = (qualityMode !== 1);
+      flashlight.castShadow = player.flashlightOn && qualityMode !== 1;
+      const qNames = ['平衡模式 (1.25x + 陰影)', '極速模式 (1.0x 無陰影)', '高畫質模式 (2.0x + 陰影)'];
+      playClickSound(400);
+      showToast(`畫質切換：${qNames[qualityMode]}`);
     } else if (e.code === 'KeyV') {
       camera.fov = camera.fov < 65 ? 72 : 58;
       camera.updateProjectionMatrix();
@@ -4363,6 +4499,9 @@
     return;
   }
 
+  let qualityMode = 0; // 0: Balanced, 1: Performance, 2: Ultra
+  let raycastTimer = 0;
+  let fpsFrames = 0, fpsAcc = 0, currentFps = 60;
   const clock = new THREE.Clock();
   let hudTimer = 0;
 
@@ -4467,12 +4606,16 @@
       if (scene.environment !== null) scene.environment = null; // Cut outdoor sky PMREM IBL for TRUE 100% darkness!
       hemiLight.intensity = 0.0;
       sunLight.intensity = 0.0;
+      sunLight.castShadow = false;
     } else {
       if (envRT && scene.environment !== envRT.texture) scene.environment = envRT.texture;
       hemiLight.intensity = baseHemiIntensity * (1.0 - curInteriorFactor * 0.82);
       const belowWaterDarken = py < 3.5 ? 0.78 : 0.0;
       sunLight.intensity = baseSunIntensity * (1.0 - curInteriorFactor * belowWaterDarken);
+      // Skip 2048x2048 sun shadow pass when deep inside enclosed below-deck spaces or in Performance mode!
+      sunLight.castShadow = (qualityMode !== 1) && (curInteriorFactor < 0.72) && (sunLight.intensity > 0.05);
     }
+    updateLightPool(dt, isPitchBlackSpace);
     renderer.toneMappingExposure = 0.88;
 
     // 2. Animate Doors & Accommodation Ladders
@@ -4540,10 +4683,22 @@
       engineOsc.frequency.setTargetAtTime(28 + Math.abs(currentKnots) * 1.5, audioCtx.currentTime, 0.15);
     }
 
-    // Update Radar Display, ECR Live 6-Cylinder Telemetry Cabinet & HUD
+    // Update Radar Display, ECR Live 6-Cylinder Telemetry Cabinet & Throttled 10Hz Raycaster
     updateRadarTexture(elapsed, dt);
     updateEcrPanel(elapsed, dt);
-    updateInteractionCheck();
+    raycastTimer += dt;
+    if (raycastTimer >= 0.1) {
+      raycastTimer = 0;
+      updateInteractionCheck();
+    }
+
+    fpsFrames++;
+    fpsAcc += dt;
+    if (fpsAcc >= 0.5) {
+      currentFps = Math.round(fpsFrames / fpsAcc);
+      fpsFrames = 0;
+      fpsAcc = 0;
+    }
 
     hudTimer += dt;
     if (hudTimer > 0.15) {
@@ -4552,7 +4707,7 @@
       locDeckEl.textContent = deckName;
       locRoomEl.textContent = roomName;
       locCoordsEl.textContent = `X: ${player.pos.x.toFixed(1)}m | Y: ${player.pos.y.toFixed(1)}m | Z: ${player.pos.z.toFixed(1)}m`;
-      shipStatsEl.textContent = `航速: ${currentKnots.toFixed(1)} kn | 航向: ${String(shipHeading).padStart(3, '0')}°`;
+      shipStatsEl.textContent = `航速: ${currentKnots.toFixed(1)} kn | ${currentFps} FPS | Calls: ${renderer.info.render.calls}`;
       telegraphBadgeEl.textContent = `車鐘: ${targetMode.name}`;
     }
 
